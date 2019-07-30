@@ -1,6 +1,7 @@
 # spell
 
-[![GoDoc](https://godoc.org/github.com/eskriett/spell?status.svg)](https://godoc.org/github.com/eskriett/spell)
+[![GoDoc](https://godoc.org/github.com/eskriett/spell?status.svg)](https://godoc.org/github.com/eskriett/spell) 
+[![Go Report Card](https://goreportcard.com/badge/github.com/eskriett/spell)](https://goreportcard.com/report/github.com/eskriett/spell)
 
 A blazing fast spell checker written in Go.
 
