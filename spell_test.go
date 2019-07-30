@@ -1,27 +1,26 @@
-package spell_test
+package spell
 
 import (
 	"fmt"
 	"sort"
 
-	"github.com/eskriett/spell"
 	"github.com/eskriett/strmet"
 )
 
 func ExampleSpell_AddEntry() {
 	// Create a new speller
-	s := spell.New()
+	s := New()
 
 	// Add a new word, "example" to the dictionary
-	s.AddEntry(spell.Entry{
+	s.AddEntry(Entry{
 		Word:     "example",
-		WordData: spell.WordData{"frequency": 10},
+		WordData: WordData{"frequency": 10},
 	})
 
 	// Overwrite the data for word "example"
-	s.AddEntry(spell.Entry{
+	s.AddEntry(Entry{
 		Word:     "example",
-		WordData: spell.WordData{"frequency": 100},
+		WordData: WordData{"frequency": 100},
 	})
 
 	// Output the frequency for word "example"
@@ -34,10 +33,10 @@ func ExampleSpell_AddEntry() {
 
 func ExampleSpell_Lookup() {
 	// Create a new speller
-	s := spell.New()
-	s.AddEntry(spell.Entry{
+	s := New()
+	s.AddEntry(Entry{
 		Word:     "example",
-		WordData: spell.WordData{"frequency": 1},
+		WordData: WordData{"frequency": 1},
 	})
 
 	// Perform a default lookup for example
@@ -49,14 +48,14 @@ func ExampleSpell_Lookup() {
 
 func ExampleSpell_Lookup_configureEditDistance() {
 	// Create a new speller
-	s := spell.New()
-	s.AddEntry(spell.Entry{
+	s := New()
+	s.AddEntry(Entry{
 		Word:     "example",
-		WordData: spell.WordData{"frequency": 1},
+		WordData: WordData{"frequency": 1},
 	})
 
 	// Lookup exact matches, i.e. edit distance = 0
-	suggestions, _ := s.Lookup("eample", spell.EditDistance(0))
+	suggestions, _ := s.Lookup("eample", EditDistance(0))
 	fmt.Printf("Suggestions are: %v\n", suggestions)
 	// Output:
 	// Suggestions are: []
@@ -64,15 +63,15 @@ func ExampleSpell_Lookup_configureEditDistance() {
 
 func ExampleSpell_Lookup_configureDistanceFunc() {
 	// Create a new speller
-	s := spell.New()
-	s.AddEntry(spell.Entry{
+	s := New()
+	s.AddEntry(Entry{
 		Word:     "example",
-		WordData: spell.WordData{"frequency": 1},
+		WordData: WordData{"frequency": 1},
 	})
 
 	// Configure the Lookup to use Levenshtein distance rather than the default
 	// Damerau Levenshtein calculation
-	s.Lookup("example", spell.DistanceFunc(func(s1, s2 string, maxDist int) int {
+	s.Lookup("example", DistanceFunc(func(s1, s2 string, maxDist int) int {
 		// Call the Levenshtein function from github.com/eskriett/strmet
 		return strmet.Levenshtein(s1, s2, maxDist)
 	}))
@@ -80,14 +79,14 @@ func ExampleSpell_Lookup_configureDistanceFunc() {
 
 func ExampleSpell_Lookup_configureSortFunc() {
 	// Create a new speller
-	s := spell.New()
-	s.AddEntry(spell.Entry{
+	s := New()
+	s.AddEntry(Entry{
 		Word:     "example",
-		WordData: spell.WordData{"frequency": 1},
+		WordData: WordData{"frequency": 1},
 	})
 
 	// Configure suggestions to be sorted solely by their frequency
-	s.Lookup("example", spell.SortFunc(func(sl spell.SuggestionList) {
+	s.Lookup("example", SortFunc(func(sl SuggestionList) {
 		sort.Slice(sl, func(i, j int) bool {
 			s1Freq := sl[i].WordData.GetFrequency()
 			s2Freq := sl[j].WordData.GetFrequency()
@@ -98,13 +97,13 @@ func ExampleSpell_Lookup_configureSortFunc() {
 
 func ExampleSpell_Segment() {
 	// Create a new speller
-	s := spell.New()
+	s := New()
 
-	wd := spell.WordData{"frequency": 1}
-	s.AddEntry(spell.Entry{Word: "the", WordData: wd})
-	s.AddEntry(spell.Entry{Word: "quick", WordData: wd})
-	s.AddEntry(spell.Entry{Word: "brown", WordData: wd})
-	s.AddEntry(spell.Entry{Word: "fox", WordData: wd})
+	wd := WordData{"frequency": 1}
+	s.AddEntry(Entry{Word: "the", WordData: wd})
+	s.AddEntry(Entry{Word: "quick", WordData: wd})
+	s.AddEntry(Entry{Word: "brown", WordData: wd})
+	s.AddEntry(Entry{Word: "fox", WordData: wd})
 
 	// Segment a string with word concatenated together
 	segmentResult, _ := s.Segment("thequickbrownfox")
