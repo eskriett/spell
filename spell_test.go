@@ -1,8 +1,11 @@
 package spell
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"sort"
+	"testing"
 
 	"github.com/eskriett/strmet"
 )
@@ -110,4 +113,124 @@ func ExampleSpell_Segment() {
 	fmt.Println(segmentResult)
 	// Output:
 	// the quick brown fox
+}
+
+func newWithExample() (*Spell, error) {
+	s := New()
+	ok, err := s.AddEntry(Entry{
+		Word:     "example",
+		WordData: WordData{"frequency": 1},
+	})
+	if err != nil {
+		return s, err
+	}
+	if !ok {
+		return s, errors.New("failed to insert entry")
+	}
+	return s, nil
+}
+
+func TestAddEntry(t *testing.T) {
+	_, err := newWithExample()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLookup(t *testing.T) {
+	s, err := newWithExample()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	suggestions, err := s.Lookup("eample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 1 {
+		t.Fatal("did not get exactly one match")
+	}
+	if suggestions[0].Word != "example" {
+		t.Fatal(fmt.Sprintf("Expected example, got %s", suggestions[0].Word))
+	}
+}
+
+func TestRemoveEntry(t *testing.T) {
+	s, err := newWithExample()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok := s.RemoveEntry("example"); !ok {
+		t.Fatal("failed to remove entry")
+	}
+	suggestions, err := s.Lookup("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 0 {
+		t.Fatal("did not get exactly zero matches")
+	}
+	if ok := s.RemoveEntry("example"); ok {
+		t.Fatal("should not remove twice")
+	}
+}
+
+func TestLongestWord(t *testing.T) {
+	s, err := newWithExample()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wordLength := s.GetLongestWord(); wordLength != uint32(len("example")) {
+		t.Fatal("failed to get longes word length, expected 7 got: ", wordLength)
+	}
+}
+
+func TestSaveLoad(t *testing.T) {
+	s1, err := newWithExample()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove("./test.dump")
+	if err := s1.Save("./test.dump"); err != nil {
+		t.Fatal(err)
+	}
+	s2, err := Load("./test.dump")
+	if err != nil {
+		t.Fatal(err)
+	}
+	suggestions, err := s2.Lookup("eample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 1 {
+		t.Fatal("did not get exactly one match")
+	}
+	if suggestions[0].Word != "example" {
+		t.Fatal(fmt.Sprintf("Expected example, got %s", suggestions[0].Word))
+	}
+
+}
+
+func TestCornerCases(t *testing.T) {
+	s := New()
+	ok, err := s.AddEntry(Entry{
+		Word:     "",
+		WordData: WordData{"frequency": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("failed to add entry to speller")
+	}
+	suggestions, err := s.Lookup("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 1 {
+		t.Fatal("did not get exactly one match")
+	}
+	if suggestions[0].Word != "" {
+		t.Fatal(fmt.Sprintf("Expected ' ', got %s", suggestions[0].Word))
+	}
 }
