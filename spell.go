@@ -69,7 +69,6 @@ type Entry struct {
 // GetFrequency returns the frequency of a word, i.e. how many times it's been
 // seen
 func (w WordData) GetFrequency() int {
-
 	if frequency, exists := w["frequency"]; exists {
 		if freq, ok := frequency.(int); ok {
 			return freq
@@ -96,22 +95,29 @@ func New() *Spell {
 // Load a dictionary from disk from filename. Returns a new Spell instance on
 // success, or will return an error if there's a problem reading the file.
 func Load(filename string) (*Spell, error) {
-
 	s := New()
 
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return nil, err
 	}
-	defer gz.Close()
 
 	data, err := ioutil.ReadAll(gz)
+	if err != nil {
+		return nil, err
+	}
+
+	err = f.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	err = gz.Close()
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +131,10 @@ func Load(filename string) (*Spell, error) {
 
 	// Load the deletes
 	deletes := make(map[uint32][]string)
-	json.Unmarshal([]byte(gj.Get("deletes").String()), &deletes)
+	err = json.Unmarshal([]byte(gj.Get("deletes").String()), &deletes)
+	if err != nil {
+		return nil, err
+	}
 
 	s.deletes.Lock()
 	s.deletes.data = deletes
@@ -150,7 +159,6 @@ func Load(filename string) (*Spell, error) {
 // Will return an error if there was a problem adding a word, for example the
 // dictionary entry must contain word data with a "frequency" field.
 func (s *Spell) AddEntry(de Entry) (bool, error) {
-
 	word := de.Word
 	data := de.WordData
 
@@ -215,7 +223,6 @@ func (s *Spell) RemoveEntry(word string) bool {
 
 // Save a representation of spell to disk at filename
 func (s *Spell) Save(filename string) error {
-
 	jsonStr, _ := json.Marshal(map[string]interface{}{
 		"cumulativeFreq": atomic.LoadUint32(&s.cumulativeFreq),
 		"deletes":        s.deletes.data,
@@ -233,8 +240,15 @@ func (s *Spell) Save(filename string) error {
 	}
 
 	w := gzip.NewWriter(f)
-	w.Write([]byte(jsonStr))
-	w.Close()
+	_, err = w.Write(jsonStr)
+	if err != nil {
+		return err
+	}
+
+	err = w.Close()
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -316,7 +330,7 @@ func DistanceFunc(df func(string, string, int) int) LookupOption {
 func EditDistance(dist uint32) LookupOption {
 	return func(lp *lookupParams) error {
 		if dist < 0 {
-			return errors.New("Edit distance must be 0 or higher")
+			return errors.New("edit distance must be 0 or higher")
 		}
 
 		lp.editDistance = dist
@@ -348,7 +362,7 @@ func SuggestionLevel(level suggestionLevel) LookupOption {
 func PrefixLength(prefixLength uint32) LookupOption {
 	return func(lp *lookupParams) error {
 		if prefixLength < 1 {
-			return errors.New("Prefix length must be greater than 0")
+			return errors.New("prefix length must be greater than 0")
 		}
 		lp.prefixLength = prefixLength
 		return nil
@@ -356,7 +370,6 @@ func PrefixLength(prefixLength uint32) LookupOption {
 }
 
 func (s *Spell) newDictSuggestion(input string, dist int) Suggestion {
-
 	wordData, _ := s.words.load(input)
 
 	return Suggestion{
@@ -375,7 +388,6 @@ func (s *Spell) newDictSuggestion(input string, dist int) Suggestion {
 // Accepts zero or more LookupOption that can be used to configure how lookup
 // occurs.
 func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, error) {
-
 	lookupParams := s.defaultLookupParams()
 
 	for _, opt := range opts {
@@ -413,7 +425,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 	consideredSuggestions[input] = true
 
 	// Keep a list of words we want to try
-	candidates := []string{}
+	var candidates []string
 
 	// Restrict the length of the input we'll examine
 	inputPrefixLen := min(inputLen, prefixLength)
@@ -436,7 +448,6 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 
 		candidateHash := getStringHash(candidate)
 		if suggestions, exists := s.deletes.load(candidateHash); exists {
-
 			for _, suggestion := range suggestions {
 				suggestionLen := len(suggestion)
 
@@ -506,7 +517,6 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 				// the results and if so, how.
 				if dist <= editDistance {
 					if len(results) > 0 {
-
 						switch lookupParams.suggestionLevel {
 						case LevelClosest:
 							if dist < editDistance {
@@ -617,7 +627,6 @@ func (s SegmentResult) String() string {
 // Accepts zero or more SegmentOption that can be used to configure how
 // segmentation occurs
 func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, error) {
-
 	segmentParams := s.defaultSegmentParams()
 
 	for _, opt := range opts {
@@ -628,12 +637,12 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 
 	longestWord := int(atomic.LoadUint32(&s.longestWord))
 	if longestWord == 0 {
-		return nil, errors.New("Longest word in dictionary has zero length")
+		return nil, errors.New("longest word in dictionary has zero length")
 	}
 
 	cumulativeFreq := float64(atomic.LoadUint32(&s.cumulativeFreq))
 	if cumulativeFreq == 0 {
-		return nil, errors.New("Cumulative frequency is zero")
+		return nil, errors.New("cumulative frequency is zero")
 	}
 
 	arraySize := min(len(input), longestWord)
@@ -705,7 +714,6 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 					compositions[destinationIdx].probability < compositions[circularIdx].probability+topProbabilityLog) ||
 				compositions[circularIdx].distanceSum+separatorLength+topEd <
 					compositions[destinationIdx].distanceSum {
-
 				compositions[destinationIdx] = composition{
 					segmentedString: compositions[circularIdx].segmentedString + " " + part,
 					correctedString: compositions[circularIdx].correctedString + " " + topResult,
@@ -741,11 +749,9 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 }
 
 func (s *Spell) generateDeletes(word string, editDistance uint32, deletes deletes) deletes {
-
 	editDistance++
 
 	if wordLen := len(word); wordLen > 1 {
-
 		for i := 0; i < wordLen; i++ {
 			deleteWord := removeChar(word, i)
 			deleteHash := getStringHash(deleteWord)
@@ -765,7 +771,6 @@ func (s *Spell) generateDeletes(word string, editDistance uint32, deletes delete
 }
 
 func (s *Spell) getDeletes(word string) deletes {
-
 	deletes := deletes{}
 	wordLen := len(word)
 
@@ -849,7 +854,6 @@ func abs(a int) int {
 }
 
 func addKey(hash map[string]bool, key string) bool {
-
 	if _, exists := hash[key]; exists {
 		return false
 	}
