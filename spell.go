@@ -604,6 +604,7 @@ type Segment struct {
 
 // SegmentResult holds the result of a call to Segment()
 type SegmentResult struct {
+	Distance int
 	Segments []Segment
 }
 
@@ -746,6 +747,7 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 	}
 
 	result := SegmentResult{
+		Distance: compositions[circularIdx].distanceSum,
 		Segments: segments,
 	}
 
