@@ -597,8 +597,9 @@ func SegmentLookupOpts(opt ...LookupOption) SegmentOption {
 
 // Segment contains details about an individual segment
 type Segment struct {
-	Word  string
+	Input string
 	Entry *Entry
+	Word  string
 }
 
 // SegmentResult holds the result of a call to Segment()
@@ -729,13 +730,16 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 		}
 	}
 
+	segmentedString := compositions[circularIdx].segmentedString
 	correctedString := compositions[circularIdx].correctedString
-	words := strings.Split(correctedString, " ")
-	segments := make([]Segment, len(words))
+	segmentedWords := strings.Split(segmentedString, " ")
+	correctedWords := strings.Split(correctedString, " ")
+	segments := make([]Segment, len(correctedWords))
 
-	for i, word := range words {
+	for i, word := range correctedWords {
 		e := s.GetEntry(word)
 		segments[i] = Segment{
+			Input: segmentedWords[i],
 			Word:  word,
 			Entry: e,
 		}
