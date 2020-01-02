@@ -180,7 +180,7 @@ func (s *Spell) AddEntry(de Entry) (bool, error) {
 	s.words.store(word, data)
 
 	// Keep track of the longest word in the dictionary
-	wordLength := uint32(len(word))
+	wordLength := uint32(len([]rune(word)))
 	if wordLength > atomic.LoadUint32(&s.longestWord) {
 		atomic.StoreUint32(&s.longestWord, wordLength)
 	}
@@ -414,7 +414,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 		return results, nil
 	}
 
-	inputLen := len(input)
+	inputLen := len([]rune(input))
 	prefixLength := int(lookupParams.prefixLength)
 
 	// Keep track of the deletes we've already considered
@@ -429,12 +429,12 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 
 	// Restrict the length of the input we'll examine
 	inputPrefixLen := min(inputLen, prefixLength)
-	candidates = append(candidates, input[:inputPrefixLen])
+	candidates = append(candidates, substring(input, 0, inputPrefixLen))
 
 	for i := 0; i < len(candidates); i++ {
 
 		candidate := candidates[i]
-		candidateLen := len(candidate)
+		candidateLen := len([]rune(candidate))
 		lengthDiff := inputPrefixLen - candidateLen
 
 		// If the different between the prefixed input and candidate is larger
@@ -449,7 +449,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 		candidateHash := getStringHash(candidate)
 		if suggestions, exists := s.deletes.load(candidateHash); exists {
 			for _, suggestion := range suggestions {
-				suggestionLen := len(suggestion)
+				suggestionLen := len([]rune(suggestion))
 
 				// Ignore the suggestion if it equals the input
 				if suggestion == input {
@@ -647,7 +647,9 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 		return nil, errors.New("cumulative frequency is zero")
 	}
 
-	arraySize := min(len(input), longestWord)
+	inputLen := len([]rune(input))
+
+	arraySize := min(inputLen, longestWord)
 	circularIdx := -1
 
 	type composition struct {
@@ -658,12 +660,12 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 	}
 	compositions := make([]composition, arraySize)
 
-	for i := 0; i < len(input); i++ {
+	for i := 0; i < inputLen; i++ {
 
-		jMax := min(len(input)-i, longestWord)
+		jMax := min(inputLen-i, longestWord)
 
 		for j := 1; j <= jMax; j++ {
-			part := input[i : i+j]
+			part := substring(input, i, i+j)
 
 			separatorLength := 0
 			topEd := 0
@@ -671,14 +673,14 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 			topResult := ""
 
 			if unicode.Is(unicode.White_Space, rune(part[0])) {
-				part = input[i+1 : i+j]
+				part = substring(input, i+1, i+j)
 			} else {
 				separatorLength = 1
 			}
 
-			topEd += len(part)
+			topEd += len([]rune(part))
 			part = strings.Replace(part, " ", "", -1)
-			topEd -= len(part)
+			topEd -= len([]rune(part))
 
 			suggestions, err := s.Lookup(part, segmentParams.lookupOptions...)
 			if err != nil {
@@ -694,9 +696,9 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 			} else {
 				// Unknown word
 				topResult = part
-				topEd += len(part)
+				topEd += len([]rune(part))
 				topProbabilityLog = math.Log10(10.0 / (cumulativeFreq *
-					math.Pow(10.0, float64(len(part)))))
+					math.Pow(10.0, float64(len([]rune(part))))))
 			}
 
 			destinationIdx := (j + circularIdx) % arraySize
@@ -757,7 +759,7 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 func (s *Spell) generateDeletes(word string, editDistance uint32, deletes deletes) deletes {
 	editDistance++
 
-	if wordLen := len(word); wordLen > 1 {
+	if wordLen := len([]rune(word)); wordLen > 1 {
 		for i := 0; i < wordLen; i++ {
 			deleteWord := removeChar(word, i)
 			deleteHash := getStringHash(deleteWord)
@@ -778,12 +780,12 @@ func (s *Spell) generateDeletes(word string, editDistance uint32, deletes delete
 
 func (s *Spell) getDeletes(word string) deletes {
 	deletes := deletes{}
-	wordLen := len(word)
+	wordLen := len([]rune(word))
 
 	// Restrict the size of the word to the max length of the prefix we'll
 	// examine
 	if wordLen > int(s.PrefixLength) {
-		word = word[0:s.PrefixLength]
+		word = substring(word, 0, int(s.PrefixLength))
 	}
 
 	wordHash := getStringHash(word)
@@ -894,5 +896,25 @@ func min(a, b int) int {
 }
 
 func removeChar(str string, index int) string {
-	return str[0:index] + str[index+1:]
+	return substring(str, 0, index) + substring(str, index+1, len([]rune(str))-1)
+}
+
+func substring(s string, start int, end int) string {
+	if start >= len([]rune(s)) {
+		return ""
+	}
+
+	start_str_idx := 0
+	i := 0
+
+	for j := range s {
+		if i == start {
+			start_str_idx = j
+		}
+		if i == end {
+			return s[start_str_idx:j]
+		}
+		i++
+	}
+	return s[start_str_idx:]
 }

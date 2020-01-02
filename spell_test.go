@@ -153,6 +153,37 @@ func TestLookup(t *testing.T) {
 	if suggestions[0].Word != "example" {
 		t.Fatal(fmt.Sprintf("Expected example, got %s", suggestions[0].Word))
 	}
+
+	// Test Unicode strings
+	suggestions, err = s.Lookup("ex𝐚mple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 1 {
+		t.Fatal("did not get exactly one match")
+	}
+	if suggestions[0].Word != "example" {
+		t.Fatal(fmt.Sprintf("Expected example, got %s", suggestions[0].Word))
+	}
+
+	ok, err := s.AddEntry(Entry{
+		Word:     "ex𝐚mple",
+		WordData: WordData{"frequency": 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("Failed to add unicode entry")
+	}
+
+	suggestions, err = s.Lookup("ex𝐚mple")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suggestions[0].Word != "ex𝐚mple" {
+		t.Fatal(fmt.Sprintf("Expected ex𝐚mple, got %s", suggestions[0].Word))
+	}
 }
 
 func TestRemoveEntry(t *testing.T) {
@@ -181,7 +212,7 @@ func TestLongestWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	if wordLength := s.GetLongestWord(); wordLength != uint32(len("example")) {
-		t.Fatal("failed to get longes word length, expected 7 got: ", wordLength)
+		t.Fatal("failed to get longest word length, expected 7 got: ", wordLength)
 	}
 }
 
@@ -208,7 +239,6 @@ func TestSaveLoad(t *testing.T) {
 	if suggestions[0].Word != "example" {
 		t.Fatal(fmt.Sprintf("Expected example, got %s", suggestions[0].Word))
 	}
-
 }
 
 func TestCornerCases(t *testing.T) {
