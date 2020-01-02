@@ -904,17 +904,17 @@ func substring(s string, start int, end int) string {
 		return ""
 	}
 
-	start_str_idx := 0
+	startStrIdx := 0
 	i := 0
 
 	for j := range s {
 		if i == start {
-			start_str_idx = j
+			startStrIdx = j
 		}
 		if i == end {
-			return s[start_str_idx:j]
+			return s[startStrIdx:j]
 		}
 		i++
 	}
-	return s[start_str_idx:]
+	return s[startStrIdx:]
 }
