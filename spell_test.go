@@ -10,6 +10,17 @@ import (
 	"github.com/eskriett/strmet"
 )
 
+func BenchmarkSpell_Lookup(b *testing.B) {
+	s, err := newWithExample()
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	for n := 0; n < b.N; n++ {
+		s.Lookup("exampl")
+	}
+}
+
 func ExampleSpell_AddEntry() {
 	// Create a new speller
 	s := New()
