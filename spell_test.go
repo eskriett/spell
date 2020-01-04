@@ -27,20 +27,20 @@ func ExampleSpell_AddEntry() {
 
 	// Add a new word, "example" to the dictionary
 	s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 10},
+		Frequency: 10,
+		Word:      "example",
 	})
 
 	// Overwrite the data for word "example"
 	s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 100},
+		Frequency: 100,
+		Word:      "example",
 	})
 
 	// Output the frequency for word "example"
 	entry := s.GetEntry("example")
 	fmt.Printf("Output for word 'example' is: %v\n",
-		entry.WordData.GetFrequency())
+		entry.Frequency)
 	// Output:
 	// Output for word 'example' is: 100
 }
@@ -49,8 +49,8 @@ func ExampleSpell_Lookup() {
 	// Create a new speller
 	s := New()
 	s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "example",
 	})
 
 	// Perform a default lookup for example
@@ -64,8 +64,8 @@ func ExampleSpell_Lookup_configureEditDistance() {
 	// Create a new speller
 	s := New()
 	s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "example",
 	})
 
 	// Lookup exact matches, i.e. edit distance = 0
@@ -79,8 +79,8 @@ func ExampleSpell_Lookup_configureDistanceFunc() {
 	// Create a new speller
 	s := New()
 	s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "example",
 	})
 
 	// Configure the Lookup to use Levenshtein distance rather than the default
@@ -95,16 +95,14 @@ func ExampleSpell_Lookup_configureSortFunc() {
 	// Create a new speller
 	s := New()
 	s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "example",
 	})
 
 	// Configure suggestions to be sorted solely by their frequency
 	s.Lookup("example", SortFunc(func(sl SuggestionList) {
 		sort.Slice(sl, func(i, j int) bool {
-			s1Freq := sl[i].WordData.GetFrequency()
-			s2Freq := sl[j].WordData.GetFrequency()
-			return s1Freq < s2Freq
+			return sl[i].Frequency < sl[j].Frequency
 		})
 	}))
 }
@@ -113,11 +111,10 @@ func ExampleSpell_Segment() {
 	// Create a new speller
 	s := New()
 
-	wd := WordData{"frequency": 1}
-	s.AddEntry(Entry{Word: "the", WordData: wd})
-	s.AddEntry(Entry{Word: "quick", WordData: wd})
-	s.AddEntry(Entry{Word: "brown", WordData: wd})
-	s.AddEntry(Entry{Word: "fox", WordData: wd})
+	s.AddEntry(Entry{Frequency: 1, Word: "the"})
+	s.AddEntry(Entry{Frequency: 1, Word: "quick"})
+	s.AddEntry(Entry{Frequency: 1, Word: "brown"})
+	s.AddEntry(Entry{Frequency: 1, Word: "fox"})
 
 	// Segment a string with word concatenated together
 	segmentResult, _ := s.Segment("thequickbrownfox")
@@ -129,8 +126,8 @@ func ExampleSpell_Segment() {
 func newWithExample() (*Spell, error) {
 	s := New()
 	ok, err := s.AddEntry(Entry{
-		Word:     "example",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "example",
 	})
 	if err != nil {
 		return s, err
@@ -178,8 +175,8 @@ func TestLookup(t *testing.T) {
 	}
 
 	ok, err := s.AddEntry(Entry{
-		Word:     "ex𝐚mple",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "ex𝐚mple",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -255,8 +252,8 @@ func TestSaveLoad(t *testing.T) {
 func TestCornerCases(t *testing.T) {
 	s := New()
 	ok, err := s.AddEntry(Entry{
-		Word:     "",
-		WordData: WordData{"frequency": 1},
+		Frequency: 1,
+		Word:      "",
 	})
 	if err != nil {
 		t.Fatal(err)

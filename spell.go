@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Hayden Eskriett. All rights reserved.
+// Copyright (c) 2020 Hayden Eskriett. All rights reserved.
 // Use of this source code is governed by a MIT license that can be found in the
 // LICENSE file.
 
@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/eskriett/strmet"
+	"github.com/mitchellh/mapstructure"
 	"github.com/tidwall/gjson"
 )
 
@@ -51,33 +52,20 @@ type Spell struct {
 	// The prefix length that will be examined
 	PrefixLength uint32
 
-	cumulativeFreq uint32
+	cumulativeFreq uint64
 	deletes        *deletesMap
 	longestWord    uint32
 	words          *wordsMap
 }
 
-// WordData stores metadata about a word, for example its frequency.
+// WordData stores metadata about a word.
 type WordData map[string]interface{}
 
 // Entry represents a word in the dictionary
 type Entry struct {
-	Word     string
-	WordData WordData
-}
-
-// GetFrequency returns the frequency of a word, i.e. how many times it's been
-// seen
-func (w WordData) GetFrequency() int {
-	if frequency, exists := w["frequency"]; exists {
-		if freq, ok := frequency.(int); ok {
-			return freq
-		} else if freq, ok := frequency.(float64); ok {
-			return int(freq)
-		}
-	}
-
-	return -1
+	Frequency uint64
+	Word      string
+	WordData  WordData
 }
 
 // New creates a new spell instance
@@ -125,7 +113,9 @@ func Load(filename string) (*Spell, error) {
 	// Load the words
 	gj := gjson.ParseBytes(data)
 	gj.Get("words").ForEach(func(key, value gjson.Result) bool {
-		s.words.store(key.String(), value.Value().(map[string]interface{}))
+		e := Entry{}
+		mapstructure.Decode(value.Value(), &e)
+		s.words.store(key.String(), e)
 		return true
 	})
 
@@ -149,35 +139,28 @@ func Load(filename string) (*Spell, error) {
 	}
 
 	atomic.StoreUint32(&s.longestWord, uint32(gj.Get("longestWord").Int()))
-	atomic.StoreUint32(&s.cumulativeFreq, uint32(gj.Get("cumulativeFreq").Int()))
+	atomic.StoreUint64(&s.cumulativeFreq, uint64(gj.Get("cumulativeFreq").Int()))
 
 	return s, nil
 }
 
 // AddEntry adds an entry to the dictionary. If the word already exists its data
 // will be overwritten. Returns true if a new word was added, false otherwise.
-// Will return an error if there was a problem adding a word, for example the
-// dictionary entry must contain word data with a "frequency" field.
+// Will return an error if there was a problem adding a word
 func (s *Spell) AddEntry(de Entry) (bool, error) {
 	word := de.Word
-	data := de.WordData
 
-	var frequency int
-	if frequency = data.GetFrequency(); frequency < 0 {
-		return false, errors.New("WordData must contain a non-negative frequency")
-	}
-	atomic.AddUint32(&s.cumulativeFreq, uint32(frequency))
+	atomic.AddUint64(&s.cumulativeFreq, de.Frequency)
 
 	// If the word already exists, just update its result - we don't need to
 	// recalculate the deletes as these should never change
-	if wordData, exists := s.words.load(word); exists {
-		frequency = wordData.GetFrequency()
-		atomic.AddUint32(&s.cumulativeFreq, ^uint32(frequency-1))
-		s.words.store(word, data)
+	if _, exists := s.words.load(word); exists {
+		atomic.AddUint64(&s.cumulativeFreq, ^uint64(de.Frequency-1))
+		s.words.store(word, de)
 		return false, nil
 	}
 
-	s.words.store(word, data)
+	s.words.store(word, de)
 
 	// Keep track of the longest word in the dictionary
 	wordLength := uint32(len([]rune(word)))
@@ -200,13 +183,10 @@ func (s *Spell) AddEntry(de Entry) (bool, error) {
 // GetEntry returns the Entry for word. If a word does not exist, nil will
 // be returned
 func (s *Spell) GetEntry(word string) *Entry {
-	entry, exists := s.words.load(word)
-	if exists {
-		return &Entry{
-			Word:     word,
-			WordData: entry,
-		}
+	if entry, exists := s.words.load(word); exists {
+		return &entry
 	}
+
 	return nil
 }
 
@@ -224,7 +204,7 @@ func (s *Spell) RemoveEntry(word string) bool {
 // Save a representation of spell to disk at filename
 func (s *Spell) Save(filename string) error {
 	jsonStr, _ := json.Marshal(map[string]interface{}{
-		"cumulativeFreq": atomic.LoadUint32(&s.cumulativeFreq),
+		"cumulativeFreq": atomic.LoadUint64(&s.cumulativeFreq),
 		"deletes":        s.deletes.data,
 		"longestWord":    atomic.LoadUint32(&s.longestWord),
 		"options": map[string]interface{}{
@@ -295,13 +275,10 @@ func (s *Spell) defaultLookupParams() *lookupParams {
 				s1 := results[i]
 				s2 := results[j]
 
-				s1Freq := s1.WordData.GetFrequency()
-				s2Freq := s2.WordData.GetFrequency()
-
 				if s1.Distance < s2.Distance {
 					return true
 				} else if s1.Distance == s2.Distance {
-					return s1Freq > s2Freq
+					return s1.Frequency > s2.Frequency
 				}
 
 				return false
@@ -370,14 +347,11 @@ func PrefixLength(prefixLength uint32) LookupOption {
 }
 
 func (s *Spell) newDictSuggestion(input string, dist int) Suggestion {
-	wordData, _ := s.words.load(input)
+	entry, _ := s.words.load(input)
 
 	return Suggestion{
 		Distance: dist,
-		Entry: Entry{
-			Word:     input,
-			WordData: wordData,
-		},
+		Entry:    entry,
 	}
 }
 
@@ -432,12 +406,11 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 	candidates = append(candidates, substring(input, 0, inputPrefixLen))
 
 	for i := 0; i < len(candidates); i++ {
-
 		candidate := candidates[i]
 		candidateLen := len([]rune(candidate))
 		lengthDiff := inputPrefixLen - candidateLen
 
-		// If the different between the prefixed input and candidate is larger
+		// If the difference between the prefixed input and candidate is larger
 		// than the max edit distance then skip the candidate
 		if lengthDiff > editDistance {
 			if lookupParams.suggestionLevel == LevelAll {
@@ -523,10 +496,10 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 								results = SuggestionList{}
 							}
 						case LevelBest:
-							wordData, _ := s.words.load(suggestion)
-							curFreq := wordData.GetFrequency()
-							closestFreq :=
-								results[0].WordData.GetFrequency()
+							entry, _ := s.words.load(suggestion)
+
+							curFreq := entry.Frequency
+							closestFreq := results[0].Frequency
 
 							if dist < editDistance || curFreq > closestFreq {
 								editDistance = dist
@@ -642,7 +615,7 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 		return nil, errors.New("longest word in dictionary has zero length")
 	}
 
-	cumulativeFreq := float64(atomic.LoadUint32(&s.cumulativeFreq))
+	cumulativeFreq := float64(atomic.LoadUint64(&s.cumulativeFreq))
 	if cumulativeFreq == 0 {
 		return nil, errors.New("cumulative frequency is zero")
 	}
@@ -691,7 +664,7 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 				topResult = suggestions[0].Entry.Word
 				topEd += suggestions[0].Distance
 
-				freq := suggestions[0].WordData.GetFrequency()
+				freq := suggestions[0].Frequency
 				topProbabilityLog = math.Log10(float64(freq) / cumulativeFreq)
 			} else {
 				// Unknown word
@@ -820,23 +793,23 @@ func (dm *deletesMap) add(key uint32, value string) {
 
 type wordsMap struct {
 	sync.RWMutex
-	data map[string]WordData
+	data map[string]Entry
 }
 
 func newWordsMap() *wordsMap {
 	return &wordsMap{
-		data: make(map[string]WordData),
+		data: make(map[string]Entry),
 	}
 }
 
-func (wm *wordsMap) load(key string) (WordData, bool) {
+func (wm *wordsMap) load(key string) (Entry, bool) {
 	wm.RLock()
 	value, exists := wm.data[key]
 	wm.RUnlock()
 	return value, exists
 }
 
-func (wm *wordsMap) store(key string, value WordData) {
+func (wm *wordsMap) store(key string, value Entry) {
 	wm.Lock()
 	wm.data[key] = value
 	wm.Unlock()

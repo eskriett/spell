@@ -13,70 +13,73 @@ __N.B.__ This library is still in early development and may change.
 package main
 
 import (
-    "fmt"
+	"fmt"
 
-    "github.com/eskriett/spell"
+	"github.com/eskriett/spell"
 )
 
 func main() {
+	// Create a new instance of spell
+	s := spell.New()
 
-    // Create a new instance of spell
-    s := spell.New()
+	// Add words to the dictionary. Words require a frequency, but can have
+	// other arbitrary metadata associated with them
+	s.AddEntry(spell.Entry{
+		Frequency: 100,
+		Word:      "two",
+		WordData: spell.WordData{
+			"type": "number",
+		},
+	})
+	s.AddEntry(spell.Entry{
+		Frequency: 1,
+		Word:      "town",
+		WordData: spell.WordData{
+			"type": "noun",
+		},
+	})
 
-    // Add words to the dictionary. Words require a frequency, but can have
-    // other arbitrary metadata associated with them
-    s.AddEntry(spell.Entry{
-        Word: "two",
-        WordData: spell.WordData{
-            "frequency": 100,
-            "type":      "number",
-        },
-    })
-    s.AddEntry(spell.Entry{
-        Word: "town",
-        WordData: spell.WordData{
-            "frequency": 10,
-            "type":      "noun",
-        },
-    })
+	// Lookup a misspelling, by default the "best" suggestion will be returned
+	suggestions, _ := s.Lookup("twon")
+	fmt.Println(suggestions)
+	// -> [two]
 
-    // Lookup a misspelling, by default the "best" suggestion will be returned
-    suggestions, _ := s.Lookup("twon")
-    fmt.Printf("%v\n", suggestions)
-    // -> [two]
+	suggestion := suggestions[0]
 
-    // Get metadata from the suggestion
-    suggestion := suggestions[0]
-    fmt.Printf("%v\n", suggestion.WordData["type"])
-    // -> number
+	// Get the frequency from the suggestion
+	fmt.Println(suggestion.Frequency)
+	// -> 100
 
-    // Get multiple suggestions during lookup
-    suggestions, _ = s.Lookup("twon", spell.SuggestionLevel(spell.LevelAll))
-    fmt.Printf("%v\n", suggestions)
-    // -> [two, town]
+	// Get metadata from the suggestion
+	fmt.Println(suggestion.WordData["type"])
+	// -> number
 
-    // Save the dictionary
-    s.Save("dict.spell")
+	// Get multiple suggestions during lookup
+	suggestions, _ = s.Lookup("twon", spell.SuggestionLevel(spell.LevelAll))
+	fmt.Println(suggestions)
+	// -> [two, town]
 
-    // Load the dictionary
-    s2, _ := spell.Load("dict.spell")
+	// Save the dictionary
+	s.Save("dict.spell")
 
-    suggestions, _ = s2.Lookup("twon", spell.SuggestionLevel(spell.LevelAll))
-    fmt.Printf("%v\n", suggestions)
-    // -> [two, town]
+	// Load the dictionary
+	s2, _ := spell.Load("dict.spell")
 
-    // Spell supports word segmentation
-    s3 := spell.New()
+	suggestions, _ = s2.Lookup("twon", spell.SuggestionLevel(spell.LevelAll))
+	fmt.Println(suggestions)
+	// -> [two, town]
 
-    wd := spell.WordData{"frequency": 1}
-    s3.AddEntry(spell.Entry{Word: "the", WordData: wd})
-    s3.AddEntry(spell.Entry{Word: "quick", WordData: wd})
-    s3.AddEntry(spell.Entry{Word: "brown", WordData: wd})
-    s3.AddEntry(spell.Entry{Word: "fox", WordData: wd})
+	// Spell supports word segmentation
+	s3 := spell.New()
 
-    segmentResult, _ := s3.Segment("thequickbrownfox")
-    fmt.Println(segmentResult)
-    // -> the quick brown fox
+	s3.AddEntry(spell.Entry{Frequency: 1, Word: "the"})
+	s3.AddEntry(spell.Entry{Frequency: 1, Word: "quick"})
+	s3.AddEntry(spell.Entry{Frequency: 1, Word: "brown"})
+	s3.AddEntry(spell.Entry{Frequency: 1, Word: "fox"})
+
+	segmentResult, _ := s3.Segment("thequickbrownfox")
+	fmt.Println(segmentResult)
+	// -> the quick brown fox
 }
 ```
 
