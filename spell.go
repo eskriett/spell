@@ -896,7 +896,7 @@ func min(a, b int) int {
 }
 
 func removeChar(str string, index int) string {
-	return substring(str, 0, index) + substring(str, index+1, len([]rune(str))-1)
+	return substring(str, 0, index) + substring(str, index+1, len([]rune(str)))
 }
 
 func substring(s string, start int, end int) string {
