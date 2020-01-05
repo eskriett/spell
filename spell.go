@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
+	"log"
 	"math"
 	"os"
 	"sort"
@@ -114,8 +115,12 @@ func Load(filename string) (*Spell, error) {
 	gj := gjson.ParseBytes(data)
 	gj.Get("words").ForEach(func(key, value gjson.Result) bool {
 		e := Entry{}
-		mapstructure.Decode(value.Value(), &e)
-		s.AddEntry(e)
+		if err := mapstructure.Decode(value.Value(), &e); err != nil {
+			log.Fatal(err)
+		}
+		if _, err := s.AddEntry(e); err != nil {
+			log.Fatal(err)
+		}
 		return true
 	})
 
@@ -141,7 +146,7 @@ func (s *Spell) AddEntry(de Entry) (bool, error) {
 	// If the word already exists, just update its result - we don't need to
 	// recalculate the deletes as these should never change
 	if _, exists := s.words.load(word); exists {
-		atomic.AddUint64(&s.cumulativeFreq, ^uint64(de.Frequency-1))
+		atomic.AddUint64(&s.cumulativeFreq, ^(de.Frequency - 1))
 		s.words.store(word, de)
 		return false, nil
 	}
@@ -296,10 +301,6 @@ func DistanceFunc(df func([]rune, []rune, int) int) LookupOption {
 // the edit distance will improve lookup performance.
 func EditDistance(dist uint32) LookupOption {
 	return func(lp *lookupParams) error {
-		if dist < 0 {
-			return errors.New("edit distance must be 0 or higher")
-		}
-
 		lp.editDistance = dist
 		return nil
 	}

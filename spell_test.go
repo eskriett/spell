@@ -17,7 +17,9 @@ func BenchmarkSpell_Lookup(b *testing.B) {
 	}
 
 	for n := 0; n < b.N; n++ {
-		s.Lookup("exampl")
+		if _, err := s.Lookup("exampl"); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -26,13 +28,13 @@ func ExampleSpell_AddEntry() {
 	s := New()
 
 	// Add a new word, "example" to the dictionary
-	s.AddEntry(Entry{
+	_, _ = s.AddEntry(Entry{
 		Frequency: 10,
 		Word:      "example",
 	})
 
 	// Overwrite the data for word "example"
-	s.AddEntry(Entry{
+	_, _ = s.AddEntry(Entry{
 		Frequency: 100,
 		Word:      "example",
 	})
@@ -48,7 +50,7 @@ func ExampleSpell_AddEntry() {
 func ExampleSpell_Lookup() {
 	// Create a new speller
 	s := New()
-	s.AddEntry(Entry{
+	_, _ = s.AddEntry(Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
@@ -63,7 +65,7 @@ func ExampleSpell_Lookup() {
 func ExampleSpell_Lookup_configureEditDistance() {
 	// Create a new speller
 	s := New()
-	s.AddEntry(Entry{
+	_, _ = s.AddEntry(Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
@@ -78,14 +80,14 @@ func ExampleSpell_Lookup_configureEditDistance() {
 func ExampleSpell_Lookup_configureDistanceFunc() {
 	// Create a new speller
 	s := New()
-	s.AddEntry(Entry{
+	_, _ = s.AddEntry(Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
 
 	// Configure the Lookup to use Levenshtein distance rather than the default
 	// Damerau Levenshtein calculation
-	s.Lookup("example", DistanceFunc(func(r1, r2 []rune, maxDist int) int {
+	_, _ = s.Lookup("example", DistanceFunc(func(r1, r2 []rune, maxDist int) int {
 		// Call the Levenshtein function from github.com/eskriett/strmet
 		return strmet.LevenshteinRunes(r1, r2, maxDist)
 	}))
@@ -94,13 +96,13 @@ func ExampleSpell_Lookup_configureDistanceFunc() {
 func ExampleSpell_Lookup_configureSortFunc() {
 	// Create a new speller
 	s := New()
-	s.AddEntry(Entry{
+	_, _ = s.AddEntry(Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
 
 	// Configure suggestions to be sorted solely by their frequency
-	s.Lookup("example", SortFunc(func(sl SuggestionList) {
+	_, _ = s.Lookup("example", SortFunc(func(sl SuggestionList) {
 		sort.Slice(sl, func(i, j int) bool {
 			return sl[i].Frequency < sl[j].Frequency
 		})
@@ -111,10 +113,10 @@ func ExampleSpell_Segment() {
 	// Create a new speller
 	s := New()
 
-	s.AddEntry(Entry{Frequency: 1, Word: "the"})
-	s.AddEntry(Entry{Frequency: 1, Word: "quick"})
-	s.AddEntry(Entry{Frequency: 1, Word: "brown"})
-	s.AddEntry(Entry{Frequency: 1, Word: "fox"})
+	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "the"})
+	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "quick"})
+	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "brown"})
+	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "fox"})
 
 	// Segment a string with word concatenated together
 	segmentResult, _ := s.Segment("thequickbrownfox")
