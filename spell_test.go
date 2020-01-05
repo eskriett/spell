@@ -85,9 +85,9 @@ func ExampleSpell_Lookup_configureDistanceFunc() {
 
 	// Configure the Lookup to use Levenshtein distance rather than the default
 	// Damerau Levenshtein calculation
-	s.Lookup("example", DistanceFunc(func(s1, s2 string, maxDist int) int {
+	s.Lookup("example", DistanceFunc(func(r1, r2 []rune, maxDist int) int {
 		// Call the Levenshtein function from github.com/eskriett/strmet
-		return strmet.Levenshtein(s1, s2, maxDist)
+		return strmet.LevenshteinRunes(r1, r2, maxDist)
 	}))
 }
 

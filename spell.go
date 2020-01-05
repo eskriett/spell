@@ -63,9 +63,9 @@ type WordData map[string]interface{}
 
 // Entry represents a word in the dictionary
 type Entry struct {
-	Frequency uint64
+	Frequency uint64 `json:",omitempty"`
 	Word      string
-	WordData  WordData
+	WordData  WordData `json:",omitempty"`
 }
 
 // New creates a new spell instance
@@ -115,20 +115,9 @@ func Load(filename string) (*Spell, error) {
 	gj.Get("words").ForEach(func(key, value gjson.Result) bool {
 		e := Entry{}
 		mapstructure.Decode(value.Value(), &e)
-		s.words.store(key.String(), e)
+		s.AddEntry(e)
 		return true
 	})
-
-	// Load the deletes
-	deletes := make(map[uint32][]string)
-	err = json.Unmarshal([]byte(gj.Get("deletes").String()), &deletes)
-	if err != nil {
-		return nil, err
-	}
-
-	s.deletes.Lock()
-	s.deletes.data = deletes
-	s.deletes.Unlock()
 
 	if gj.Get("options.editDistance").Exists() {
 		s.MaxEditDistance = uint32(gj.Get("options.editDistance").Int())
@@ -137,9 +126,6 @@ func Load(filename string) (*Spell, error) {
 	if gj.Get("options.prefixLength").Exists() {
 		s.PrefixLength = uint32(gj.Get("options.prefixLength").Int())
 	}
-
-	atomic.StoreUint32(&s.longestWord, uint32(gj.Get("longestWord").Int()))
-	atomic.StoreUint64(&s.cumulativeFreq, uint64(gj.Get("cumulativeFreq").Int()))
 
 	return s, nil
 }
@@ -172,8 +158,15 @@ func (s *Spell) AddEntry(de Entry) (bool, error) {
 	// word with it
 	deletes := s.getDeletes(word)
 	if len(deletes) > 0 {
+		wordRunes := []rune(word)
+
+		de := deleteEntry{
+			len:   len(wordRunes),
+			runes: wordRunes,
+			str:   word,
+		}
 		for deleteHash := range deletes {
-			s.deletes.add(deleteHash, word)
+			s.deletes.add(deleteHash, &de)
 		}
 	}
 
@@ -204,9 +197,6 @@ func (s *Spell) RemoveEntry(word string) bool {
 // Save a representation of spell to disk at filename
 func (s *Spell) Save(filename string) error {
 	jsonStr, _ := json.Marshal(map[string]interface{}{
-		"cumulativeFreq": atomic.LoadUint64(&s.cumulativeFreq),
-		"deletes":        s.deletes.data,
-		"longestWord":    atomic.LoadUint32(&s.longestWord),
 		"options": map[string]interface{}{
 			"editDistance": s.MaxEditDistance,
 			"prefixLength": s.PrefixLength,
@@ -258,7 +248,7 @@ func (s SuggestionList) String() string {
 }
 
 type lookupParams struct {
-	distanceFunction func(string, string, int) int
+	distanceFunction func([]rune, []rune, int) int
 	editDistance     uint32
 	prefixLength     uint32
 	sortFunc         func(SuggestionList)
@@ -267,7 +257,7 @@ type lookupParams struct {
 
 func (s *Spell) defaultLookupParams() *lookupParams {
 	return &lookupParams{
-		distanceFunction: strmet.DamerauLevenshtein,
+		distanceFunction: strmet.DamerauLevenshteinRunes,
 		editDistance:     s.MaxEditDistance,
 		prefixLength:     s.PrefixLength,
 		sortFunc: func(results SuggestionList) {
@@ -295,7 +285,7 @@ type LookupOption func(*lookupParams) error
 // DistanceFunc accepts a function, f(str1, str2, maxDist), which calculates the
 // distance between two strings. It should return -1 if the distance between the
 // strings is greater than maxDist.
-func DistanceFunc(df func(string, string, int) int) LookupOption {
+func DistanceFunc(df func([]rune, []rune, int) int) LookupOption {
 	return func(lp *lookupParams) error {
 		lp.distanceFunction = df
 		return nil
@@ -388,7 +378,8 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 		return results, nil
 	}
 
-	inputLen := len([]rune(input))
+	inputRunes := []rune(input)
+	inputLen := len(inputRunes)
 	prefixLength := int(lookupParams.prefixLength)
 
 	// Keep track of the deletes we've already considered
@@ -422,10 +413,10 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 		candidateHash := getStringHash(candidate)
 		if suggestions, exists := s.deletes.load(candidateHash); exists {
 			for _, suggestion := range suggestions {
-				suggestionLen := len([]rune(suggestion))
+				suggestionLen := suggestion.len
 
 				// Ignore the suggestion if it equals the input
-				if suggestion == input {
+				if suggestion.str == input {
 					continue
 				}
 
@@ -438,7 +429,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 				//   candidate (in the case of a hash collision)
 				if abs(suggestionLen-inputLen) > editDistance ||
 					suggestionLen < candidateLen ||
-					(suggestionLen == candidateLen && suggestion != candidate) {
+					(suggestionLen == candidateLen && suggestion.str != candidate) {
 					continue
 				}
 
@@ -458,7 +449,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 				if candidateLen == 0 {
 					dist = max(inputLen, suggestionLen)
 					if dist > editDistance ||
-						!addKey(consideredSuggestions, suggestion) {
+						!addKey(consideredSuggestions, suggestion.str) {
 						continue
 					}
 				} else if suggestionLen == 1 {
@@ -467,21 +458,21 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 					// input contains the suggestion. If it does than the edit
 					// distance is input - 1, otherwise it's the length of the
 					// input
-					if strings.Contains(input, suggestion) {
+					if strings.Contains(input, suggestion.str) {
 						dist = inputLen - 1
 					} else {
 						dist = inputLen
 					}
 
 					if dist > editDistance ||
-						!addKey(consideredSuggestions, suggestion) {
+						!addKey(consideredSuggestions, suggestion.str) {
 						continue
 					}
 				} else {
-					if !addKey(consideredSuggestions, suggestion) {
+					if !addKey(consideredSuggestions, suggestion.str) {
 						continue
 					}
-					if dist = lookupParams.distanceFunction(input, suggestion, editDistance); dist < 1 {
+					if dist = lookupParams.distanceFunction(inputRunes, suggestion.runes, editDistance); dist < 1 {
 						continue
 					}
 				}
@@ -496,14 +487,14 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 								results = SuggestionList{}
 							}
 						case LevelBest:
-							entry, _ := s.words.load(suggestion)
+							entry, _ := s.words.load(suggestion.str)
 
 							curFreq := entry.Frequency
 							closestFreq := results[0].Frequency
 
 							if dist < editDistance || curFreq > closestFreq {
 								editDistance = dist
-								results[0] = s.newDictSuggestion(suggestion, dist)
+								results[0] = s.newDictSuggestion(suggestion.str, dist)
 							}
 							continue
 						}
@@ -514,7 +505,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 					}
 
 					results = append(results,
-						s.newDictSuggestion(suggestion, dist))
+						s.newDictSuggestion(suggestion.str, dist))
 				}
 
 			}
@@ -767,25 +758,31 @@ func (s *Spell) getDeletes(word string) deletes {
 	return s.generateDeletes(word, 0, deletes)
 }
 
+type deleteEntry struct {
+	len   int
+	runes []rune
+	str   string
+}
+
 type deletesMap struct {
 	sync.RWMutex
-	data map[uint32][]string
+	data map[uint32][]*deleteEntry
 }
 
 func newDeletesMap() *deletesMap {
 	return &deletesMap{
-		data: make(map[uint32][]string),
+		data: make(map[uint32][]*deleteEntry),
 	}
 }
 
-func (dm *deletesMap) load(key uint32) ([]string, bool) {
+func (dm *deletesMap) load(key uint32) ([]*deleteEntry, bool) {
 	dm.RLock()
 	value, exists := dm.data[key]
 	dm.RUnlock()
 	return value, exists
 }
 
-func (dm *deletesMap) add(key uint32, value string) {
+func (dm *deletesMap) add(key uint32, value *deleteEntry) {
 	dm.Lock()
 	dm.data[key] = append(dm.data[key], value)
 	dm.Unlock()
