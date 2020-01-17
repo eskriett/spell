@@ -81,6 +81,16 @@ func main() {
 	segmentResult, _ := s3.Segment("thequickbrownfox")
 	fmt.Println(segmentResult)
 	// -> the quick brown fox
+
+	// Spell supports multiple dictionaries
+	s4 := spell.New()
+
+	s4.AddEntry(spell.Entry{Word: "épeler"}, spell.Name("french"))
+	suggestions, _ = s4.Lookup("épeler", spell.DictionaryOpts(
+		spell.Name("french"),
+	))
+	fmt.Println(suggestions)
+	// -> [épeler]
 }
 ```
 

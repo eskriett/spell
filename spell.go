@@ -40,6 +40,7 @@ const (
 )
 
 const (
+	defaultDict         = "default"
 	defaultEditDistance = 2
 	defaultPrefixLength = 7
 )
@@ -53,10 +54,10 @@ type Spell struct {
 	// The prefix length that will be examined
 	PrefixLength uint32
 
-	cumulativeFreq uint64
-	deletes        *deletesMap
-	longestWord    uint32
-	words          *wordsMap
+	cumulativeFreq    uint64
+	dictionaryDeletes *dictionaryDeletes
+	longestWord       uint32
+	library           *library
 }
 
 // WordData stores metadata about a word.
@@ -73,11 +74,11 @@ type Entry struct {
 func New() *Spell {
 	s := new(Spell)
 	s.cumulativeFreq = 0
-	s.deletes = newDeletesMap()
+	s.dictionaryDeletes = newDictionaryDeletes()
 	s.longestWord = 0
 	s.MaxEditDistance = defaultEditDistance
 	s.PrefixLength = defaultPrefixLength
-	s.words = newWordsMap()
+	s.library = newLibrary()
 	return s
 }
 
@@ -113,14 +114,18 @@ func Load(filename string) (*Spell, error) {
 
 	// Load the words
 	gj := gjson.ParseBytes(data)
-	gj.Get("words").ForEach(func(key, value gjson.Result) bool {
-		e := Entry{}
-		if err := mapstructure.Decode(value.Value(), &e); err != nil {
-			log.Fatal(err)
-		}
-		if _, err := s.AddEntry(e); err != nil {
-			log.Fatal(err)
-		}
+	gj.Get("words").ForEach(func(dictionary, entries gjson.Result) bool {
+		entries.ForEach(func(word, definition gjson.Result) bool {
+			e := Entry{}
+			if err := mapstructure.Decode(definition.Value(), &e); err != nil {
+				log.Fatal(err)
+			}
+
+			if _, err := s.AddEntry(e); err != nil {
+				log.Fatal(err)
+			}
+			return true
+		})
 		return true
 	})
 
@@ -135,23 +140,55 @@ func Load(filename string) (*Spell, error) {
 	return s, nil
 }
 
+type dictParams struct {
+	name string
+}
+
+// DictionaryOption is a function that controls the dictionary being used.
+// An error will be returned if a dictionary option is invalid
+type DictionaryOption func(*dictParams) error
+
+func (s *Spell) defaultDictParams() *dictParams {
+	return &dictParams{
+		name: defaultDict,
+	}
+}
+
+// Name defines the name of the dictionary that should be used when storing,
+// deleting, looking up words, etc. If not set, the default dictionary will be
+// used
+func Name(name string) DictionaryOption {
+	return func(params *dictParams) error {
+		params.name = name
+		return nil
+	}
+}
+
 // AddEntry adds an entry to the dictionary. If the word already exists its data
 // will be overwritten. Returns true if a new word was added, false otherwise.
 // Will return an error if there was a problem adding a word
-func (s *Spell) AddEntry(de Entry) (bool, error) {
+func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
+	dictParams := s.defaultDictParams()
+
+	for _, opt := range opts {
+		if err := opt(dictParams); err != nil {
+			return false, err
+		}
+	}
+
 	word := de.Word
 
 	atomic.AddUint64(&s.cumulativeFreq, de.Frequency)
 
 	// If the word already exists, just update its result - we don't need to
 	// recalculate the deletes as these should never change
-	if _, exists := s.words.load(word); exists {
+	if _, exists := s.library.load(dictParams.name, word); exists {
 		atomic.AddUint64(&s.cumulativeFreq, ^(de.Frequency - 1))
-		s.words.store(word, de)
+		s.library.store(dictParams.name, word, de)
 		return false, nil
 	}
 
-	s.words.store(word, de)
+	s.library.store(dictParams.name, word, de)
 
 	// Keep track of the longest word in the dictionary
 	wordLength := uint32(len([]rune(word)))
@@ -171,7 +208,7 @@ func (s *Spell) AddEntry(de Entry) (bool, error) {
 			str:   word,
 		}
 		for deleteHash := range deletes {
-			s.deletes.add(deleteHash, &de)
+			s.dictionaryDeletes.add(dictParams.name, deleteHash, &de)
 		}
 	}
 
@@ -180,12 +217,19 @@ func (s *Spell) AddEntry(de Entry) (bool, error) {
 
 // GetEntry returns the Entry for word. If a word does not exist, nil will
 // be returned
-func (s *Spell) GetEntry(word string) *Entry {
-	if entry, exists := s.words.load(word); exists {
-		return &entry
+func (s *Spell) GetEntry(word string, opts ...DictionaryOption) (*Entry, error) {
+	dictParams := s.defaultDictParams()
+
+	for _, opt := range opts {
+		if err := opt(dictParams); err != nil {
+			return nil, err
+		}
 	}
 
-	return nil
+	if entry, exists := s.library.load(dictParams.name, word); exists {
+		return &entry, nil
+	}
+	return nil, nil
 }
 
 // GetLongestWord returns the length of the longest word in the dictionary
@@ -195,8 +239,16 @@ func (s *Spell) GetLongestWord() uint32 {
 
 // RemoveEntry removes a entry from the dictionary. Returns true if the entry
 // was removed, false otherwise
-func (s *Spell) RemoveEntry(word string) bool {
-	return s.words.remove(word)
+func (s *Spell) RemoveEntry(word string, opts ...DictionaryOption) (bool, error) {
+	dictParams := s.defaultDictParams()
+
+	for _, opt := range opts {
+		if err := opt(dictParams); err != nil {
+			return false, err
+		}
+	}
+
+	return s.library.remove(dictParams.name, word), nil
 }
 
 // Save a representation of spell to disk at filename
@@ -206,7 +258,7 @@ func (s *Spell) Save(filename string) error {
 			"editDistance": s.MaxEditDistance,
 			"prefixLength": s.PrefixLength,
 		},
-		"words": s.words.data,
+		"words": s.library.dictionaries,
 	})
 
 	f, err := os.Create(filename)
@@ -253,6 +305,7 @@ func (s SuggestionList) String() string {
 }
 
 type lookupParams struct {
+	dictParams       *dictParams
 	distanceFunction func([]rune, []rune, int) int
 	editDistance     uint32
 	prefixLength     uint32
@@ -262,6 +315,7 @@ type lookupParams struct {
 
 func (s *Spell) defaultLookupParams() *lookupParams {
 	return &lookupParams{
+		dictParams:       s.defaultDictParams(),
 		distanceFunction: strmet.DamerauLevenshteinRunes,
 		editDistance:     s.MaxEditDistance,
 		prefixLength:     s.PrefixLength,
@@ -286,6 +340,19 @@ func (s *Spell) defaultLookupParams() *lookupParams {
 // LookupOption is a function that controls how a Lookup is performed. An error
 // will be returned if the LookupOption is invalid.
 type LookupOption func(*lookupParams) error
+
+// DictionaryOpts accepts multiple DictionaryOption and controls what
+// dictionary should be used during lookup
+func DictionaryOpts(opts ...DictionaryOption) LookupOption {
+	return func(params *lookupParams) error {
+		for _, opt := range opts {
+			if err := opt(params.dictParams); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
 
 // DistanceFunc accepts a function, f(str1, str2, maxDist), which calculates the
 // distance between two strings. It should return -1 if the distance between the
@@ -337,8 +404,8 @@ func PrefixLength(prefixLength uint32) LookupOption {
 	}
 }
 
-func (s *Spell) newDictSuggestion(input string, dist int) Suggestion {
-	entry, _ := s.words.load(input)
+func (s *Spell) newDictSuggestion(input string, dist int, dp *dictParams) Suggestion {
+	entry, _ := s.library.load(dp.name, input)
 
 	return Suggestion{
 		Distance: dist,
@@ -362,10 +429,11 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 	}
 
 	results := SuggestionList{}
+	dict := lookupParams.dictParams.name
 
 	// Check for an exact match
-	if _, exists := s.words.load(input); exists {
-		results = append(results, s.newDictSuggestion(input, 0))
+	if _, exists := s.library.load(dict, input); exists {
+		results = append(results, s.newDictSuggestion(input, 0, lookupParams.dictParams))
 
 		if lookupParams.suggestionLevel != LevelAll {
 			return results, nil
@@ -412,7 +480,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 		}
 
 		candidateHash := getStringHash(candidate)
-		if suggestions, exists := s.deletes.load(candidateHash); exists {
+		if suggestions, exists := s.dictionaryDeletes.load(dict, candidateHash); exists {
 			for _, suggestion := range suggestions {
 				suggestionLen := suggestion.len
 
@@ -488,14 +556,14 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 								results = SuggestionList{}
 							}
 						case LevelBest:
-							entry, _ := s.words.load(suggestion.str)
+							entry, _ := s.library.load(lookupParams.dictParams.name, suggestion.str)
 
 							curFreq := entry.Frequency
 							closestFreq := results[0].Frequency
 
 							if dist < editDistance || curFreq > closestFreq {
 								editDistance = dist
-								results[0] = s.newDictSuggestion(suggestion.str, dist)
+								results[0] = s.newDictSuggestion(suggestion.str, dist, lookupParams.dictParams)
 							}
 							continue
 						}
@@ -506,7 +574,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 					}
 
 					results = append(results,
-						s.newDictSuggestion(suggestion.str, dist))
+						s.newDictSuggestion(suggestion.str, dist, lookupParams.dictParams))
 				}
 
 			}
@@ -705,7 +773,11 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 	segments := make([]Segment, len(correctedWords))
 
 	for i, word := range correctedWords {
-		e := s.GetEntry(word)
+		e, err := s.GetEntry(word)
+		if err != nil {
+			return nil, err
+		}
+
 		segments[i] = Segment{
 			Input: segmentedWords[i],
 			Word:  word,
@@ -759,66 +831,85 @@ func (s *Spell) getDeletes(word string) deletes {
 	return s.generateDeletes(word, 0, deletes)
 }
 
+type dictionaryDeletes struct {
+	sync.RWMutex
+	dictionaries map[string]deletesMap
+}
+
+type deletesMap map[uint32][]*deleteEntry
+
 type deleteEntry struct {
 	len   int
 	runes []rune
 	str   string
 }
 
-type deletesMap struct {
-	sync.RWMutex
-	data map[uint32][]*deleteEntry
-}
-
-func newDeletesMap() *deletesMap {
-	return &deletesMap{
-		data: make(map[uint32][]*deleteEntry),
+func newDictionaryDeletes() *dictionaryDeletes {
+	return &dictionaryDeletes{
+		dictionaries: make(map[string]deletesMap),
 	}
 }
 
-func (dm *deletesMap) load(key uint32) ([]*deleteEntry, bool) {
-	dm.RLock()
-	value, exists := dm.data[key]
-	dm.RUnlock()
-	return value, exists
+func (dd *dictionaryDeletes) load(dict string, key uint32) ([]*deleteEntry, bool) {
+	dd.RLock()
+	entry, exists := dd.dictionaries[dict][key]
+	dd.RUnlock()
+	return entry, exists
 }
 
-func (dm *deletesMap) add(key uint32, value *deleteEntry) {
-	dm.Lock()
-	dm.data[key] = append(dm.data[key], value)
-	dm.Unlock()
+func (dd *dictionaryDeletes) add(dict string, key uint32, entry *deleteEntry) {
+	dd.Lock()
+	if _, exists := dd.dictionaries[dict]; !exists {
+		dd.dictionaries[dict] = make(deletesMap)
+	}
+
+	dd.dictionaries[dict][key] = append(dd.dictionaries[dict][key], entry)
+	dd.Unlock()
 }
 
-type wordsMap struct {
+// library is a collection of dictionaries
+type library struct {
 	sync.RWMutex
-	data map[string]Entry
+	dictionaries map[string]dictionary
 }
 
-func newWordsMap() *wordsMap {
-	return &wordsMap{
-		data: make(map[string]Entry),
+// dictionary is a mapping of a word to its dictionary entry
+type dictionary map[string]Entry
+
+// newLibrary creates an empty library of dictionaries
+func newLibrary() *library {
+	return &library{
+		dictionaries: make(map[string]dictionary),
 	}
 }
 
-func (wm *wordsMap) load(key string) (Entry, bool) {
-	wm.RLock()
-	value, exists := wm.data[key]
-	wm.RUnlock()
-	return value, exists
+// load checks if a word exists in a given dictionary
+func (l *library) load(dict, word string) (Entry, bool) {
+	l.RLock()
+	definition, exists := l.dictionaries[dict][word]
+	l.RUnlock()
+	return definition, exists
 }
 
-func (wm *wordsMap) store(key string, value Entry) {
-	wm.Lock()
-	wm.data[key] = value
-	wm.Unlock()
+// store adds a word to a given dictionary
+func (l *library) store(dict, word string, definition Entry) {
+	l.Lock()
+	if _, exists := l.dictionaries[dict]; !exists {
+		l.dictionaries[dict] = make(dictionary)
+	}
+
+	l.dictionaries[dict][word] = definition
+
+	l.Unlock()
 }
 
-func (wm *wordsMap) remove(key string) bool {
-	wm.Lock()
-	defer wm.Unlock()
+// remove deletes a word from a given dictionary
+func (l *library) remove(dict, word string) bool {
+	l.Lock()
+	defer l.Unlock()
 
-	if _, exists := wm.data[key]; exists {
-		delete(wm.data, key)
+	if _, exists := l.dictionaries[dict][word]; exists {
+		delete(l.dictionaries[dict], word)
 		return true
 	}
 

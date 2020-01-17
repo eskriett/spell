@@ -40,7 +40,7 @@ func ExampleSpell_AddEntry() {
 	})
 
 	// Output the frequency for word "example"
-	entry := s.GetEntry("example")
+	entry, _ := s.GetEntry("example")
 	fmt.Printf("Output for word 'example' is: %v\n",
 		entry.Frequency)
 	// Output:
@@ -194,6 +194,34 @@ func TestLookup(t *testing.T) {
 	if suggestions[0].Word != "ex𝐚mple" {
 		t.Fatal(fmt.Sprintf("Expected ex𝐚mple, got %s", suggestions[0].Word))
 	}
+
+	// Test adding a word to a different dictionary
+	ok, err = s.AddEntry(Entry{
+		Word: "française",
+	}, Name("french"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("Failed to add entry to different dictionary")
+	}
+
+	// Shouldn't get word from default dictionary
+	suggestions, err = s.Lookup("française")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(suggestions) != 0 {
+		t.Fatal("Should get no results for word in different dictionary")
+	}
+
+	suggestions, err = s.Lookup("française", DictionaryOpts(Name("french")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suggestions[0].Word != "française" {
+		t.Fatal(fmt.Sprintf("Expected ex𝐚mple, got %s", suggestions[0].Word))
+	}
 }
 
 func TestRemoveEntry(t *testing.T) {
@@ -201,7 +229,7 @@ func TestRemoveEntry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok := s.RemoveEntry("example"); !ok {
+	if ok, _ := s.RemoveEntry("example"); !ok {
 		t.Fatal("failed to remove entry")
 	}
 	suggestions, err := s.Lookup("example")
@@ -211,7 +239,7 @@ func TestRemoveEntry(t *testing.T) {
 	if len(suggestions) != 0 {
 		t.Fatal("did not get exactly zero matches")
 	}
-	if ok := s.RemoveEntry("example"); ok {
+	if ok, _ := s.RemoveEntry("example"); ok {
 		t.Fatal("should not remove twice")
 	}
 }
