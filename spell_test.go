@@ -194,9 +194,16 @@ func TestLookup(t *testing.T) {
 	if suggestions[0].Word != "ex𝐚mple" {
 		t.Fatal(fmt.Sprintf("Expected ex𝐚mple, got %s", suggestions[0].Word))
 	}
+}
+
+func TestLookup_multipleDictionaries(t *testing.T) {
+	s, err := newWithExample()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Test adding a word to a different dictionary
-	ok, err = s.AddEntry(Entry{
+	ok, err := s.AddEntry(Entry{
 		Word: "française",
 	}, Name("french"))
 	if err != nil {
@@ -207,7 +214,7 @@ func TestLookup(t *testing.T) {
 	}
 
 	// Shouldn't get word from default dictionary
-	suggestions, err = s.Lookup("française")
+	suggestions, err := s.Lookup("française")
 	if err != nil {
 		t.Fatal(err)
 	}
