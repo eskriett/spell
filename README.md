@@ -85,9 +85,9 @@ func main() {
 	// Spell supports multiple dictionaries
 	s4 := spell.New()
 
-	s4.AddEntry(spell.Entry{Word: "épeler"}, spell.Name("french"))
+	s4.AddEntry(spell.Entry{Word: "épeler"}, spell.DictionaryName("french"))
 	suggestions, _ = s4.Lookup("épeler", spell.DictionaryOpts(
-		spell.Name("french"),
+		spell.DictionaryName("french"),
 	))
 	fmt.Println(suggestions)
 	// -> [épeler]

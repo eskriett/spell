@@ -140,26 +140,26 @@ func Load(filename string) (*Spell, error) {
 	return s, nil
 }
 
-type dictParams struct {
+type dictOptions struct {
 	name string
 }
 
 // DictionaryOption is a function that controls the dictionary being used.
 // An error will be returned if a dictionary option is invalid
-type DictionaryOption func(*dictParams) error
+type DictionaryOption func(*dictOptions) error
 
-func (s *Spell) defaultDictParams() *dictParams {
-	return &dictParams{
+func (s *Spell) defaultDictOptions() *dictOptions {
+	return &dictOptions{
 		name: defaultDict,
 	}
 }
 
-// Name defines the name of the dictionary that should be used when storing,
-// deleting, looking up words, etc. If not set, the default dictionary will be
-// used
-func Name(name string) DictionaryOption {
-	return func(params *dictParams) error {
-		params.name = name
+// DictionaryName defines the name of the dictionary that should be used when
+// storing, deleting, looking up words, etc. If not set, the default dictionary
+// will be used
+func DictionaryName(name string) DictionaryOption {
+	return func(opts *dictOptions) error {
+		opts.name = name
 		return nil
 	}
 }
@@ -168,10 +168,10 @@ func Name(name string) DictionaryOption {
 // will be overwritten. Returns true if a new word was added, false otherwise.
 // Will return an error if there was a problem adding a word
 func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
-	dictParams := s.defaultDictParams()
+	dictOptions := s.defaultDictOptions()
 
 	for _, opt := range opts {
-		if err := opt(dictParams); err != nil {
+		if err := opt(dictOptions); err != nil {
 			return false, err
 		}
 	}
@@ -182,13 +182,13 @@ func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
 
 	// If the word already exists, just update its result - we don't need to
 	// recalculate the deletes as these should never change
-	if _, exists := s.library.load(dictParams.name, word); exists {
+	if _, exists := s.library.load(dictOptions.name, word); exists {
 		atomic.AddUint64(&s.cumulativeFreq, ^(de.Frequency - 1))
-		s.library.store(dictParams.name, word, de)
+		s.library.store(dictOptions.name, word, de)
 		return false, nil
 	}
 
-	s.library.store(dictParams.name, word, de)
+	s.library.store(dictOptions.name, word, de)
 
 	// Keep track of the longest word in the dictionary
 	wordLength := uint32(len([]rune(word)))
@@ -208,7 +208,7 @@ func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
 			str:   word,
 		}
 		for deleteHash := range deletes {
-			s.dictionaryDeletes.add(dictParams.name, deleteHash, &de)
+			s.dictionaryDeletes.add(dictOptions.name, deleteHash, &de)
 		}
 	}
 
@@ -218,15 +218,15 @@ func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
 // GetEntry returns the Entry for word. If a word does not exist, nil will
 // be returned
 func (s *Spell) GetEntry(word string, opts ...DictionaryOption) (*Entry, error) {
-	dictParams := s.defaultDictParams()
+	dictOpts := s.defaultDictOptions()
 
 	for _, opt := range opts {
-		if err := opt(dictParams); err != nil {
+		if err := opt(dictOpts); err != nil {
 			return nil, err
 		}
 	}
 
-	if entry, exists := s.library.load(dictParams.name, word); exists {
+	if entry, exists := s.library.load(dictOpts.name, word); exists {
 		return &entry, nil
 	}
 	return nil, nil
@@ -240,15 +240,15 @@ func (s *Spell) GetLongestWord() uint32 {
 // RemoveEntry removes a entry from the dictionary. Returns true if the entry
 // was removed, false otherwise
 func (s *Spell) RemoveEntry(word string, opts ...DictionaryOption) (bool, error) {
-	dictParams := s.defaultDictParams()
+	dictOpts := s.defaultDictOptions()
 
 	for _, opt := range opts {
-		if err := opt(dictParams); err != nil {
+		if err := opt(dictOpts); err != nil {
 			return false, err
 		}
 	}
 
-	return s.library.remove(dictParams.name, word), nil
+	return s.library.remove(dictOpts.name, word), nil
 }
 
 // Save a representation of spell to disk at filename
@@ -305,7 +305,7 @@ func (s SuggestionList) String() string {
 }
 
 type lookupParams struct {
-	dictParams       *dictParams
+	dictOpts         *dictOptions
 	distanceFunction func([]rune, []rune, int) int
 	editDistance     uint32
 	prefixLength     uint32
@@ -315,7 +315,7 @@ type lookupParams struct {
 
 func (s *Spell) defaultLookupParams() *lookupParams {
 	return &lookupParams{
-		dictParams:       s.defaultDictParams(),
+		dictOpts:         s.defaultDictOptions(),
 		distanceFunction: strmet.DamerauLevenshteinRunes,
 		editDistance:     s.MaxEditDistance,
 		prefixLength:     s.PrefixLength,
@@ -346,7 +346,7 @@ type LookupOption func(*lookupParams) error
 func DictionaryOpts(opts ...DictionaryOption) LookupOption {
 	return func(params *lookupParams) error {
 		for _, opt := range opts {
-			if err := opt(params.dictParams); err != nil {
+			if err := opt(params.dictOpts); err != nil {
 				return err
 			}
 		}
@@ -404,7 +404,7 @@ func PrefixLength(prefixLength uint32) LookupOption {
 	}
 }
 
-func (s *Spell) newDictSuggestion(input string, dist int, dp *dictParams) Suggestion {
+func (s *Spell) newDictSuggestion(input string, dist int, dp *dictOptions) Suggestion {
 	entry, _ := s.library.load(dp.name, input)
 
 	return Suggestion{
@@ -429,11 +429,11 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 	}
 
 	results := SuggestionList{}
-	dict := lookupParams.dictParams.name
+	dict := lookupParams.dictOpts.name
 
 	// Check for an exact match
 	if _, exists := s.library.load(dict, input); exists {
-		results = append(results, s.newDictSuggestion(input, 0, lookupParams.dictParams))
+		results = append(results, s.newDictSuggestion(input, 0, lookupParams.dictOpts))
 
 		if lookupParams.suggestionLevel != LevelAll {
 			return results, nil
@@ -556,14 +556,14 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 								results = SuggestionList{}
 							}
 						case LevelBest:
-							entry, _ := s.library.load(lookupParams.dictParams.name, suggestion.str)
+							entry, _ := s.library.load(lookupParams.dictOpts.name, suggestion.str)
 
 							curFreq := entry.Frequency
 							closestFreq := results[0].Frequency
 
 							if dist < editDistance || curFreq > closestFreq {
 								editDistance = dist
-								results[0] = s.newDictSuggestion(suggestion.str, dist, lookupParams.dictParams)
+								results[0] = s.newDictSuggestion(suggestion.str, dist, lookupParams.dictOpts)
 							}
 							continue
 						}
@@ -574,7 +574,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 					}
 
 					results = append(results,
-						s.newDictSuggestion(suggestion.str, dist, lookupParams.dictParams))
+						s.newDictSuggestion(suggestion.str, dist, lookupParams.dictOpts))
 				}
 
 			}

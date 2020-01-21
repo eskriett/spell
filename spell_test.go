@@ -205,7 +205,7 @@ func TestLookup_multipleDictionaries(t *testing.T) {
 	// Test adding a word to a different dictionary
 	ok, err := s.AddEntry(Entry{
 		Word: "française",
-	}, Name("french"))
+	}, DictionaryName("french"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestLookup_multipleDictionaries(t *testing.T) {
 		t.Fatal("Should get no results for word in different dictionary")
 	}
 
-	suggestions, err = s.Lookup("française", DictionaryOpts(Name("french")))
+	suggestions, err = s.Lookup("française", DictionaryOpts(DictionaryName("french")))
 	if err != nil {
 		t.Fatal(err)
 	}
