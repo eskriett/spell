@@ -6,6 +6,8 @@ github.com/eskriett/confusables v0.0.0-20200114183842-f26046bea886 h1:tUiIHEcMBF
 github.com/eskriett/confusables v0.0.0-20200114183842-f26046bea886/go.mod h1:yMpSyds+G50cUurOOqiOiS4CMhS798RMVssb/M18XEI=
 github.com/eskriett/strmet v0.0.0-20200105085834-0b43f6b87378 h1:oo+W+JdRJ33iP44bS6OI5f9TB79WNWz8M3tEgCC1OAU=
 github.com/eskriett/strmet v0.0.0-20200105085834-0b43f6b87378/go.mod h1:EifF5zlC1liBkHe4YKuoxeXJVUs+CRQgOEL+3QIREUg=
+github.com/eskriett/strmet v0.0.0-20200126103939-2653f802bdb0 h1:GIeVmCzx6nh+ME5+NHwRoe88hX1uts2oa0KoaJdPxp8=
+github.com/eskriett/strmet v0.0.0-20200126103939-2653f802bdb0/go.mod h1:EifF5zlC1liBkHe4YKuoxeXJVUs+CRQgOEL+3QIREUg=
 github.com/kr/pretty v0.1.0 h1:L/CwN0zerZDmRFUapSPitk6f+Q3+0za1rQkzVuMiMFI=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
@@ -20,6 +22,8 @@ github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJy
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
 github.com/tidwall/gjson v1.3.5 h1:2oW9FBNu8qt9jy5URgrzsVx/T/KSn3qn/smJQ0crlDQ=
 github.com/tidwall/gjson v1.3.5/go.mod h1:P256ACg0Mn+j1RXIDXoss50DeIABTYK1PULOJHhxOls=
+github.com/tidwall/gjson v1.4.0 h1:w6iOJZt9BJOzz4VD9CSnRCX/oleCsAZWi+1FFzZA+SA=
+github.com/tidwall/gjson v1.4.0/go.mod h1:P256ACg0Mn+j1RXIDXoss50DeIABTYK1PULOJHhxOls=
 github.com/tidwall/match v1.0.1 h1:PnKP62LPNxHKTwvHHZZzdOAOCtsJTjo6dZLCwpKm5xc=
 github.com/tidwall/match v1.0.1/go.mod h1:LujAq0jyVjBy028G1WhWfIzbpQfMO8bBZ6Tyb0+pL9E=
 github.com/tidwall/pretty v1.0.0 h1:HsD+QiTn7sK6flMKIvNmpqz1qrpP3Ps6jOKIKMooyg4=
