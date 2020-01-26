@@ -25,7 +25,7 @@ import (
 )
 
 type suggestionLevel int
-type deletes map[uint32]bool
+type deletes map[uint32]struct{}
 
 // Suggestion Levels used during Lookup.
 const (
@@ -452,11 +452,11 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 	prefixLength := int(lookupParams.prefixLength)
 
 	// Keep track of the deletes we've already considered
-	consideredDeletes := make(map[string]bool)
+	consideredDeletes := make(map[string]struct{})
 
 	// Keep track of the suggestions we've already considered
-	consideredSuggestions := make(map[string]bool)
-	consideredSuggestions[input] = true
+	consideredSuggestions := make(map[string]struct{})
+	consideredSuggestions[input] = struct{}{}
 
 	// Keep a list of words we want to try
 	var candidates []string
@@ -802,7 +802,7 @@ func (s *Spell) generateDeletes(word string, editDistance uint32, deletes delete
 			deleteHash := getStringHash(deleteWord)
 
 			if _, exists := deletes[deleteHash]; !exists {
-				deletes[deleteHash] = true
+				deletes[deleteHash] = struct{}{}
 
 				if editDistance < s.MaxEditDistance {
 					s.generateDeletes(deleteWord, editDistance, deletes)
@@ -826,7 +826,7 @@ func (s *Spell) getDeletes(word string) deletes {
 	}
 
 	wordHash := getStringHash(word)
-	deletes[wordHash] = true
+	deletes[wordHash] = struct{}{}
 
 	return s.generateDeletes(word, 0, deletes)
 }
@@ -923,12 +923,12 @@ func abs(a int) int {
 	return a
 }
 
-func addKey(hash map[string]bool, key string) bool {
+func addKey(hash map[string]struct{}, key string) bool {
 	if _, exists := hash[key]; exists {
 		return false
 	}
 
-	hash[key] = true
+	hash[key] = struct{}{}
 
 	return true
 }
