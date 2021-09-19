@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Hayden Eskriett. All rights reserved.
+// Copyright (c) 2021 Hayden Eskriett. All rights reserved.
 // Use of this source code is governed by a MIT license that can be found in the
 // LICENSE file.
 
@@ -9,7 +9,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	"os"
@@ -24,18 +24,20 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-type suggestionLevel int
-type deletes map[uint32]struct{}
+type (
+	suggestionLevel int
+	deletes         map[uint32]struct{}
+)
 
 // Suggestion Levels used during Lookup.
 const (
-	// LevelBest will yield 'best' suggestion
+	// LevelBest will yield 'best' suggestion.
 	LevelBest suggestionLevel = iota
 
-	// LevelClosest will yield closest suggestions
+	// LevelClosest will yield closest suggestions.
 	LevelClosest
 
-	// LevelAll will yield all suggestions
+	// LevelAll will yield all suggestions.
 	LevelAll
 )
 
@@ -45,7 +47,7 @@ const (
 	defaultPrefixLength = 7
 )
 
-// Spell provides access to functions for spelling correction
+// Spell provides access to functions for spelling correction.
 type Spell struct {
 	// The max number of deletes that will be performed to each word in the
 	// dictionary
@@ -63,14 +65,14 @@ type Spell struct {
 // WordData stores metadata about a word.
 type WordData map[string]interface{}
 
-// Entry represents a word in the dictionary
+// Entry represents a word in the dictionary.
 type Entry struct {
 	Frequency uint64 `json:",omitempty"`
 	Word      string
 	WordData  WordData `json:",omitempty"`
 }
 
-// New creates a new spell instance
+// New creates a new spell instance.
 func New() *Spell {
 	s := new(Spell)
 	s.cumulativeFreq = 0
@@ -79,6 +81,7 @@ func New() *Spell {
 	s.MaxEditDistance = defaultEditDistance
 	s.PrefixLength = defaultPrefixLength
 	s.library = newLibrary()
+
 	return s
 }
 
@@ -97,7 +100,7 @@ func Load(filename string) (*Spell, error) {
 		return nil, err
 	}
 
-	data, err := ioutil.ReadAll(gz)
+	data, err := io.ReadAll(gz)
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +127,10 @@ func Load(filename string) (*Spell, error) {
 			if _, err := s.AddEntry(e); err != nil {
 				log.Fatal(err)
 			}
+
 			return true
 		})
+
 		return true
 	})
 
@@ -145,7 +150,7 @@ type dictOptions struct {
 }
 
 // DictionaryOption is a function that controls the dictionary being used.
-// An error will be returned if a dictionary option is invalid
+// An error will be returned if a dictionary option is invalid.
 type DictionaryOption func(*dictOptions) error
 
 func (s *Spell) defaultDictOptions() *dictOptions {
@@ -156,17 +161,18 @@ func (s *Spell) defaultDictOptions() *dictOptions {
 
 // DictionaryName defines the name of the dictionary that should be used when
 // storing, deleting, looking up words, etc. If not set, the default dictionary
-// will be used
+// will be used.
 func DictionaryName(name string) DictionaryOption {
 	return func(opts *dictOptions) error {
 		opts.name = name
+
 		return nil
 	}
 }
 
 // AddEntry adds an entry to the dictionary. If the word already exists its data
 // will be overwritten. Returns true if a new word was added, false otherwise.
-// Will return an error if there was a problem adding a word
+// Will return an error if there was a problem adding a word.
 func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
 	dictOptions := s.defaultDictOptions()
 
@@ -185,6 +191,7 @@ func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
 	if _, exists := s.library.load(dictOptions.name, word); exists {
 		atomic.AddUint64(&s.cumulativeFreq, ^(de.Frequency - 1))
 		s.library.store(dictOptions.name, word, de)
+
 		return false, nil
 	}
 
@@ -216,7 +223,7 @@ func (s *Spell) AddEntry(de Entry, opts ...DictionaryOption) (bool, error) {
 }
 
 // GetEntry returns the Entry for word. If a word does not exist, nil will
-// be returned
+// be returned.
 func (s *Spell) GetEntry(word string, opts ...DictionaryOption) (*Entry, error) {
 	dictOpts := s.defaultDictOptions()
 
@@ -229,16 +236,17 @@ func (s *Spell) GetEntry(word string, opts ...DictionaryOption) (*Entry, error) 
 	if entry, exists := s.library.load(dictOpts.name, word); exists {
 		return &entry, nil
 	}
+
 	return nil, nil
 }
 
-// GetLongestWord returns the length of the longest word in the dictionary
+// GetLongestWord returns the length of the longest word in the dictionary.
 func (s *Spell) GetLongestWord() uint32 {
 	return atomic.LoadUint32(&s.longestWord)
 }
 
 // RemoveEntry removes a entry from the dictionary. Returns true if the entry
-// was removed, false otherwise
+// was removed, false otherwise.
 func (s *Spell) RemoveEntry(word string, opts ...DictionaryOption) (bool, error) {
 	dictOpts := s.defaultDictOptions()
 
@@ -251,7 +259,7 @@ func (s *Spell) RemoveEntry(word string, opts ...DictionaryOption) (bool, error)
 	return s.library.remove(dictOpts.name, word), nil
 }
 
-// Save a representation of spell to disk at filename
+// Save a representation of spell to disk at filename.
 func (s *Spell) Save(filename string) error {
 	jsonStr, _ := json.Marshal(map[string]interface{}{
 		"options": map[string]interface{}{
@@ -268,6 +276,7 @@ func (s *Spell) Save(filename string) error {
 
 	w := gzip.NewWriter(f)
 	_, err = w.Write(jsonStr)
+
 	if err != nil {
 		return err
 	}
@@ -287,15 +296,16 @@ type Suggestion struct {
 	Entry
 }
 
-// SuggestionList is a slice of Suggestion
+// SuggestionList is a slice of Suggestion.
 type SuggestionList []Suggestion
 
-// GetWords returns a string slice of words for the suggestions
+// GetWords returns a string slice of words for the suggestions.
 func (s SuggestionList) GetWords() []string {
 	words := make([]string, 0, len(s))
 	for _, v := range s {
 		words = append(words, v.Entry.Word)
 	}
+
 	return words
 }
 
@@ -342,7 +352,7 @@ func (s *Spell) defaultLookupParams() *lookupParams {
 type LookupOption func(*lookupParams) error
 
 // DictionaryOpts accepts multiple DictionaryOption and controls what
-// dictionary should be used during lookup
+// dictionary should be used during lookup.
 func DictionaryOpts(opts ...DictionaryOption) LookupOption {
 	return func(params *lookupParams) error {
 		for _, opt := range opts {
@@ -350,6 +360,7 @@ func DictionaryOpts(opts ...DictionaryOption) LookupOption {
 				return err
 			}
 		}
+
 		return nil
 	}
 }
@@ -360,6 +371,7 @@ func DictionaryOpts(opts ...DictionaryOption) LookupOption {
 func DistanceFunc(df func([]rune, []rune, int) int) LookupOption {
 	return func(lp *lookupParams) error {
 		lp.distanceFunction = df
+
 		return nil
 	}
 }
@@ -369,6 +381,7 @@ func DistanceFunc(df func([]rune, []rune, int) int) LookupOption {
 func EditDistance(dist uint32) LookupOption {
 	return func(lp *lookupParams) error {
 		lp.editDistance = dist
+
 		return nil
 	}
 }
@@ -379,6 +392,7 @@ func EditDistance(dist uint32) LookupOption {
 func SortFunc(sf func(SuggestionList)) LookupOption {
 	return func(lp *lookupParams) error {
 		lp.sortFunc = sf
+
 		return nil
 	}
 }
@@ -388,6 +402,7 @@ func SortFunc(sf func(SuggestionList)) LookupOption {
 func SuggestionLevel(level suggestionLevel) LookupOption {
 	return func(lp *lookupParams) error {
 		lp.suggestionLevel = level
+
 		return nil
 	}
 }
@@ -399,7 +414,9 @@ func PrefixLength(prefixLength uint32) LookupOption {
 		if prefixLength < 1 {
 			return errors.New("prefix length must be greater than 0")
 		}
+
 		lp.prefixLength = prefixLength
+
 		return nil
 	}
 }
@@ -414,7 +431,7 @@ func (s *Spell) newDictSuggestion(input string, dist int, dp *dictOptions) Sugge
 }
 
 // Lookup takes an input and returns suggestions from the dictionary for that
-// word. By default it will return the best suggestion for the word if it
+// word. By default, it will return the best suggestion for the word if it
 // exists.
 //
 // Accepts zero or more LookupOption that can be used to configure how lookup
@@ -476,6 +493,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 			if lookupParams.suggestionLevel == LevelAll {
 				continue
 			}
+
 			break
 		}
 
@@ -522,7 +540,6 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 						continue
 					}
 				} else if suggestionLen == 1 {
-
 					// If the length of the suggestion is 1, determine if the
 					// input contains the suggestion. If it does than the edit
 					// distance is input - 1, otherwise it's the length of the
@@ -565,6 +582,7 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 								editDistance = dist
 								results[0] = s.newDictSuggestion(suggestion.str, dist, lookupParams.dictOpts)
 							}
+
 							continue
 						}
 					}
@@ -576,13 +594,11 @@ func (s *Spell) Lookup(input string, opts ...LookupOption) (SuggestionList, erro
 					results = append(results,
 						s.newDictSuggestion(suggestion.str, dist, lookupParams.dictOpts))
 				}
-
 			}
 		}
 
 		// Add additional candidates
 		if lengthDiff < editDistance && candidateLen <= prefixLength {
-
 			if lookupParams.suggestionLevel != LevelAll && lengthDiff > editDistance {
 				continue
 			}
@@ -620,33 +636,35 @@ func (s *Spell) defaultSegmentParams() *segmentParams {
 type SegmentOption func(*segmentParams) error
 
 // SegmentLookupOpts allows the Lookup() options for the current segmentation to
-// be configured
+// be configured.
 func SegmentLookupOpts(opt ...LookupOption) SegmentOption {
 	return func(sp *segmentParams) error {
 		sp.lookupOptions = opt
+
 		return nil
 	}
 }
 
-// Segment contains details about an individual segment
+// Segment contains details about an individual segment.
 type Segment struct {
 	Input string
 	Entry *Entry
 	Word  string
 }
 
-// SegmentResult holds the result of a call to Segment()
+// SegmentResult holds the result of a call to Segment().
 type SegmentResult struct {
 	Distance int
 	Segments []Segment
 }
 
-// GetWords returns a string slice of words for the segments
+// GetWords returns a string slice of words for the segments.
 func (s SegmentResult) GetWords() []string {
 	words := make([]string, 0, len(s.Segments))
 	for _, s := range s.Segments {
 		words = append(words, s.Word)
 	}
+
 	return words
 }
 
@@ -660,7 +678,7 @@ func (s SegmentResult) String() string {
 // the most appropriate positions.
 //
 // Accepts zero or more SegmentOption that can be used to configure how
-// segmentation occurs
+// segmentation occurs.
 func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, error) {
 	segmentParams := s.defaultSegmentParams()
 
@@ -691,19 +709,20 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 		distanceSum     int
 		probability     float64
 	}
+
 	compositions := make([]composition, arraySize)
 
 	for i := 0; i < inputLen; i++ {
-
 		jMax := min(inputLen-i, longestWord)
 
 		for j := 1; j <= jMax; j++ {
 			part := substring(input, i, i+j)
 
-			separatorLength := 0
-			topEd := 0
-			topProbabilityLog := 0.0
-			topResult := ""
+			var topEd, separatorLength int
+
+			var topResult string
+
+			var topProbabilityLog float64
 
 			if unicode.Is(unicode.White_Space, rune(part[0])) {
 				part = substring(input, i+1, i+j)
@@ -712,7 +731,7 @@ func (s *Spell) Segment(input string, opts ...SegmentOption) (*SegmentResult, er
 			}
 
 			topEd += len([]rune(part))
-			part = strings.Replace(part, " ", "", -1)
+			part = strings.ReplaceAll(part, " ", "")
 			topEd -= len([]rune(part))
 
 			suggestions, err := s.Lookup(part, segmentParams.lookupOptions...)
@@ -808,7 +827,6 @@ func (s *Spell) generateDeletes(word string, editDistance uint32, deletes delete
 					s.generateDeletes(deleteWord, editDistance, deletes)
 				}
 			}
-
 		}
 	}
 
@@ -817,11 +835,10 @@ func (s *Spell) generateDeletes(word string, editDistance uint32, deletes delete
 
 func (s *Spell) getDeletes(word string) deletes {
 	deletes := deletes{}
-	wordLen := len([]rune(word))
 
 	// Restrict the size of the word to the max length of the prefix we'll
 	// examine
-	if wordLen > int(s.PrefixLength) {
+	if len([]rune(word)) > int(s.PrefixLength) {
 		word = substring(word, 0, int(s.PrefixLength))
 	}
 
@@ -854,6 +871,7 @@ func (dd *dictionaryDeletes) load(dict string, key uint32) ([]*deleteEntry, bool
 	dd.RLock()
 	entry, exists := dd.dictionaries[dict][key]
 	dd.RUnlock()
+
 	return entry, exists
 }
 
@@ -867,31 +885,32 @@ func (dd *dictionaryDeletes) add(dict string, key uint32, entry *deleteEntry) {
 	dd.Unlock()
 }
 
-// library is a collection of dictionaries
+// library is a collection of dictionaries.
 type library struct {
 	sync.RWMutex
 	dictionaries map[string]dictionary
 }
 
-// dictionary is a mapping of a word to its dictionary entry
+// dictionary is a mapping of a word to its dictionary entry.
 type dictionary map[string]Entry
 
-// newLibrary creates an empty library of dictionaries
+// newLibrary creates an empty library of dictionaries.
 func newLibrary() *library {
 	return &library{
 		dictionaries: make(map[string]dictionary),
 	}
 }
 
-// load checks if a word exists in a given dictionary
+// load checks if a word exists in a given dictionary.
 func (l *library) load(dict, word string) (Entry, bool) {
 	l.RLock()
 	definition, exists := l.dictionaries[dict][word]
 	l.RUnlock()
+
 	return definition, exists
 }
 
-// store adds a word to a given dictionary
+// store adds a word to a given dictionary.
 func (l *library) store(dict, word string, definition Entry) {
 	l.Lock()
 	if _, exists := l.dictionaries[dict]; !exists {
@@ -903,13 +922,14 @@ func (l *library) store(dict, word string, definition Entry) {
 	l.Unlock()
 }
 
-// remove deletes a word from a given dictionary
+// remove deletes a word from a given dictionary.
 func (l *library) remove(dict, word string) bool {
 	l.Lock()
 	defer l.Unlock()
 
 	if _, exists := l.dictionaries[dict][word]; exists {
 		delete(l.dictionaries[dict], word)
+
 		return true
 	}
 
@@ -920,6 +940,7 @@ func abs(a int) int {
 	if a < 0 {
 		return -a
 	}
+
 	return a
 }
 
@@ -933,13 +954,14 @@ func addKey(hash map[string]struct{}, key string) bool {
 	return true
 }
 
-// FNV-1a hash implementation
+// FNV-1a hash implementation.
 func getStringHash(str string) uint32 {
 	var h uint32 = 2166136261
 	for _, c := range []byte(str) {
 		h ^= uint32(c)
 		h *= 16777619
 	}
+
 	return h
 }
 
@@ -947,6 +969,7 @@ func max(a, b int) int {
 	if a > b {
 		return a
 	}
+
 	return b
 }
 
@@ -954,6 +977,7 @@ func min(a, b int) int {
 	if a < b {
 		return a
 	}
+
 	return b
 }
 
@@ -973,10 +997,12 @@ func substring(s string, start int, end int) string {
 		if i == start {
 			startStrIdx = j
 		}
+
 		if i == end {
 			return s[startStrIdx:j]
 		}
 		i++
 	}
+
 	return s[startStrIdx:]
 }

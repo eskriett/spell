@@ -1,4 +1,4 @@
-package spell
+package spell_test
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/eskriett/spell"
 	"github.com/eskriett/strmet"
 )
 
@@ -25,16 +26,16 @@ func BenchmarkSpell_Lookup(b *testing.B) {
 
 func ExampleSpell_AddEntry() {
 	// Create a new speller
-	s := New()
+	s := spell.New()
 
 	// Add a new word, "example" to the dictionary
-	_, _ = s.AddEntry(Entry{
+	_, _ = s.AddEntry(spell.Entry{
 		Frequency: 10,
 		Word:      "example",
 	})
 
 	// Overwrite the data for word "example"
-	_, _ = s.AddEntry(Entry{
+	_, _ = s.AddEntry(spell.Entry{
 		Frequency: 100,
 		Word:      "example",
 	})
@@ -49,8 +50,8 @@ func ExampleSpell_AddEntry() {
 
 func ExampleSpell_Lookup() {
 	// Create a new speller
-	s := New()
-	_, _ = s.AddEntry(Entry{
+	s := spell.New()
+	_, _ = s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
@@ -64,14 +65,14 @@ func ExampleSpell_Lookup() {
 
 func ExampleSpell_Lookup_configureEditDistance() {
 	// Create a new speller
-	s := New()
-	_, _ = s.AddEntry(Entry{
+	s := spell.New()
+	_, _ = s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
 
 	// Lookup exact matches, i.e. edit distance = 0
-	suggestions, _ := s.Lookup("eample", EditDistance(0))
+	suggestions, _ := s.Lookup("eample", spell.EditDistance(0))
 	fmt.Printf("Suggestions are: %v\n", suggestions)
 	// Output:
 	// Suggestions are: []
@@ -79,15 +80,15 @@ func ExampleSpell_Lookup_configureEditDistance() {
 
 func ExampleSpell_Lookup_configureDistanceFunc() {
 	// Create a new speller
-	s := New()
-	_, _ = s.AddEntry(Entry{
+	s := spell.New()
+	_, _ = s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
 
 	// Configure the Lookup to use Levenshtein distance rather than the default
 	// Damerau Levenshtein calculation
-	_, _ = s.Lookup("example", DistanceFunc(func(r1, r2 []rune, maxDist int) int {
+	_, _ = s.Lookup("example", spell.DistanceFunc(func(r1, r2 []rune, maxDist int) int {
 		// Call the Levenshtein function from github.com/eskriett/strmet
 		return strmet.LevenshteinRunes(r1, r2, maxDist)
 	}))
@@ -95,14 +96,14 @@ func ExampleSpell_Lookup_configureDistanceFunc() {
 
 func ExampleSpell_Lookup_configureSortFunc() {
 	// Create a new speller
-	s := New()
-	_, _ = s.AddEntry(Entry{
+	s := spell.New()
+	_, _ = s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
 
 	// Configure suggestions to be sorted solely by their frequency
-	_, _ = s.Lookup("example", SortFunc(func(sl SuggestionList) {
+	_, _ = s.Lookup("example", spell.SortFunc(func(sl spell.SuggestionList) {
 		sort.Slice(sl, func(i, j int) bool {
 			return sl[i].Frequency < sl[j].Frequency
 		})
@@ -111,12 +112,12 @@ func ExampleSpell_Lookup_configureSortFunc() {
 
 func ExampleSpell_Segment() {
 	// Create a new speller
-	s := New()
+	s := spell.New()
 
-	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "the"})
-	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "quick"})
-	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "brown"})
-	_, _ = s.AddEntry(Entry{Frequency: 1, Word: "fox"})
+	_, _ = s.AddEntry(spell.Entry{Frequency: 1, Word: "the"})
+	_, _ = s.AddEntry(spell.Entry{Frequency: 1, Word: "quick"})
+	_, _ = s.AddEntry(spell.Entry{Frequency: 1, Word: "brown"})
+	_, _ = s.AddEntry(spell.Entry{Frequency: 1, Word: "fox"})
 
 	// Segment a string with word concatenated together
 	segmentResult, _ := s.Segment("thequickbrownfox")
@@ -125,9 +126,9 @@ func ExampleSpell_Segment() {
 	// the quick brown fox
 }
 
-func newWithExample() (*Spell, error) {
-	s := New()
-	ok, err := s.AddEntry(Entry{
+func newWithExample() (*spell.Spell, error) {
+	s := spell.New()
+	ok, err := s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "example",
 	})
@@ -176,7 +177,7 @@ func TestLookup(t *testing.T) {
 		t.Fatal(fmt.Sprintf("Expected example, got %s", suggestions[0].Word))
 	}
 
-	ok, err := s.AddEntry(Entry{
+	ok, err := s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "ex𝐚mple",
 	})
@@ -203,9 +204,9 @@ func TestLookup_multipleDictionaries(t *testing.T) {
 	}
 
 	// Test adding a word to a different dictionary
-	ok, err := s.AddEntry(Entry{
+	ok, err := s.AddEntry(spell.Entry{
 		Word: "française",
-	}, DictionaryName("french"))
+	}, spell.DictionaryName("french"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +223,7 @@ func TestLookup_multipleDictionaries(t *testing.T) {
 		t.Fatal("Should get no results for word in different dictionary")
 	}
 
-	suggestions, err = s.Lookup("française", DictionaryOpts(DictionaryName("french")))
+	suggestions, err = s.Lookup("française", spell.DictionaryOpts(spell.DictionaryName("french")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +271,7 @@ func TestSaveLoad(t *testing.T) {
 	if err := s1.Save("./test.dump"); err != nil {
 		t.Fatal(err)
 	}
-	s2, err := Load("./test.dump")
+	s2, err := spell.Load("./test.dump")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,8 +288,8 @@ func TestSaveLoad(t *testing.T) {
 }
 
 func TestCornerCases(t *testing.T) {
-	s := New()
-	ok, err := s.AddEntry(Entry{
+	s := spell.New()
+	ok, err := s.AddEntry(spell.Entry{
 		Frequency: 1,
 		Word:      "",
 	})
