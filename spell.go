@@ -117,6 +117,16 @@ func Load(filename string) (*Spell, error) {
 
 	// Load the words
 	gj := gjson.ParseBytes(data)
+	
+	
+	if gj.Get("options.editDistance").Exists() {
+		s.MaxEditDistance = uint32(gj.Get("options.editDistance").Int())
+	}
+
+	if gj.Get("options.prefixLength").Exists() {
+		s.PrefixLength = uint32(gj.Get("options.prefixLength").Int())
+	}
+	
 	gj.Get("words").ForEach(func(dictionary, entries gjson.Result) bool {
 		entries.ForEach(func(word, definition gjson.Result) bool {
 			e := Entry{}
@@ -133,14 +143,6 @@ func Load(filename string) (*Spell, error) {
 
 		return true
 	})
-
-	if gj.Get("options.editDistance").Exists() {
-		s.MaxEditDistance = uint32(gj.Get("options.editDistance").Int())
-	}
-
-	if gj.Get("options.prefixLength").Exists() {
-		s.PrefixLength = uint32(gj.Get("options.prefixLength").Int())
-	}
 
 	return s, nil
 }
